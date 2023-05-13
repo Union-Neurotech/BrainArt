@@ -141,7 +141,11 @@ class BrowserUI:
         """
         Generate a vector of features of data
         """
-        pass
+        from preprocessing import get_simple_feature_vector
+        
+        feature_vector = get_simple_feature_vector(data=data, boardID=self.CURRENT_BOARD_ID)
+
+        return feature_vector
 
     def generate_image(self, features):
         """
@@ -328,7 +332,61 @@ class BrowserUI:
 
                     feature_vector = self.generate_feature_vector(data)
 
+                    # Display the feature vector
+                    st.write("#### Feature Vector")
+                    st.info("This is the feature vector that is used to generate the artwork. It is a 1D array of numbers that represent the data collected from the board.")
+
+                    gamma_band = feature_vector[4]
+
+                    progress_bar = st.progress(0, text="Gamma Band")
+                    for i in range(int(gamma_band * 100)):
+                        progress_bar.progress(i, text=f"Gamma Band: {i}%")
+
+                    beta_band = feature_vector[1]
+
+                    progress_bar = st.progress(0, text="Beta Band")
+                    for i in range(int(beta_band * 100)):
+                        progress_bar.progress(i, text=f"Beta Band: {i}%")
+
+                    alpha_band = feature_vector[0]
+
+                    progress_bar = st.progress(0, text="Alpha Band")
+                    for i in range(int(alpha_band * 100)):
+                        progress_bar.progress(i, text=f"Alpha Band: {i}%")
+
+                    theta_band = feature_vector[2]
+                    
+                    progress_bar = st.progress(0, text="Theta Band")
+                    for i in range(int(theta_band * 100)):
+                        progress_bar.progress(i, text=f"Theta Band: {i}%")
+
+                    delta_band = feature_vector[3]
+
+                    progress_bar = st.progress(0, text="Delta Band")
+                    for i in range(int(delta_band * 100)):
+                        progress_bar.progress(i, text=f"Delta Band: {i}%")
+
+                    concentration_prediction = feature_vector[5]
+
+                    progress_bar = st.progress(0, text="Concentration Prediction: 0%")
+                    for i in range(int(concentration_prediction * 100)):
+                        progress_bar.progress(i, text=f"Concentration Prediction: {i}%")
+
+                    mindfulness_prediction = feature_vector[6]
+
+                    progress_bar = st.progress(0, text="Mindfulness Prediction: 0%")
+                    for i in range(int(mindfulness_prediction * 100)):
+                        progress_bar.progress(i, text=f"Mindfulness Prediction: {i}%")
+
+                    relaxation_prediction = feature_vector[7]
+
+                    progress_bar = st.progress(0, text="Relaxation Prediction: 0%")
+                    for i in range(int(relaxation_prediction * 100)):
+                        progress_bar.progress(i, text=f"Relaxation Prediction: {i}%")
+
                     # Handle saving data
+                    # TODO: Handle Saving data
+
 
                     image_path = self.generate_image(feature_vector)
 
