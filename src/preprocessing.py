@@ -32,6 +32,29 @@ def get_feature_vector(data:pd.DataFrame, boardID:int):
         :normalized feature_vector_dict: A dictionary mapping feature names to their respective values
         :feature_vector_omnibus: A dictionary mapping a feature_vector_dict and normalized feature_vector_dict to each channel
     """
+    # For finishing
+
+    # We want a feature vector for each channel, and a feature vector for all channels
+    # Each feature vector contains the following information:
+    # - Alpha Bandpower
+    # - Beta Bandpower
+    # - Delta Bandpower
+    # - Theta Bandpower
+    # - Gamma Bandpower
+    # - Concentration
+    # - Mindfulness
+    # - Relaxation
+
+    # Making an 8-index array for each channel, and an 8-index array for all channels
+
+    # The ML models only take in a 5-index bandpower feature vector, so take that into account
+    # The seed that will be generature from this feature fector will incorporate all 8 features
+
+    # generation.py will handle how to manipulate the colors, layering, and other aspects of the image using this feature vector
+
+
+
+
     # Bandpower makes sure that data is of the right shape but just in case we check here
     
 
@@ -68,12 +91,12 @@ def get_feature_vector(data:pd.DataFrame, boardID:int):
         local_feature_vector = np.array([overall_alpha, overall_beta, overall_delta, overall_theta, overall_gamma])
         global_feature_vector = (global_feature_vector + local_feature_vector)/(channel+1)
     
-    
+
 
 
     # Get Bandpower Feature Vector for each channel, stored in a dictionary pairing them with each name
 
-    # Get Concentration, Mindfullness, and Relaxation featyure vector
+    # Get Concentration, Mindfullness, and Relaxation feature vector
 
     # Return the concatenation of all feature vectors
     pass
