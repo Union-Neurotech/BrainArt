@@ -7,9 +7,13 @@ from assets import board_id_pairs, read_userdata, update_userdata
 from communications import Comms
 
 import brainflow
-from brainflow import BoardIds, BrainFlowInputParams, BoardShim, BrainFlowError, BrainFlowClassifiers, BrainFlowMetrics
+from brainflow import BoardIds, BrainFlowInputParams, BoardShim, BrainFlowError, BrainFlowClassifiers, BrainFlowMetrics, DataFilter
+
+from plotting import generate_raw_plot
 
 import time
+
+import pandas as pd
 
 # Prototype methods for a web-browser interface for Brain Generated Artwork
 # - Leonardo Ferrisi
@@ -44,7 +48,13 @@ class BrowserUI:
         if 'recording_data' not in st.session_state:
             st.session_state['recording_data'] = None
 
-        
+        if 'EEG_DATA' not in st.session_state:
+            st.session_state['EEG_DATA'] = None
+        self.EEG_DATA = st.session_state['EEG_DATA']
+
+        if 'EEG_CHANNELS' not in st.session_state:
+            st.session_state['EEG_CHANNELS'] = None
+        self.EEG_CHANNELS = st.session_state['EEG_CHANNELS']
         BoardShim.enable_dev_board_logger()
         params = BrainFlowInputParams()
 
@@ -65,7 +75,14 @@ class BrowserUI:
 
         self.BOARD = st.session_state['BOARD']
         self.BOARD.prepare_session()
+        
+        st.session_state['EEG_CHANNELS'] = self.BOARD.get_eeg_channels(int(board_id))
+        self.EEG_CHANNELS = st.session_state['EEG_CHANNELS']
 
+        try:
+            st.write(st.session_state)
+        except:
+            st.text("No session state available. or failed to print :(")
     def disconnect_board(self):
         """
         Disconnect the board and set the user data to None
@@ -75,9 +92,6 @@ class BrowserUI:
             self.BOARD.release_all_sessions()
             st.session_state['BOARD'] = None
             self.connected = False
-
-            # if 'EEG_DATA' in st.session_state:
-            #     st.session_state['EEG_DATA'] = None
 
     def change_connection_status(self):
         """
@@ -109,13 +123,13 @@ class BrowserUI:
 
         user_data = self.BOARD.get_board_data()
 
-        if 'EEG_DATA' not in st.session_state or st.session_state['EEG_DATA'] == None:
-            st.session_state['EEG_DATA'] = user_data
+        # Overwrite EEG_DATA
+        st.session_state['EEG_DATA'] = user_data
+
         self.BOARD.stop_stream()
 
-        st.write("Task completed!")
-        st.write(user_data)
-
+        st.success("Task completed! Data collected.")
+        st.info("If you would like to record again, please click the **R**-key to re-run before clicking `START` again.")
         return user_data
     
     def generate_feature_vector(self, data):
@@ -195,8 +209,9 @@ class BrowserUI:
             st.divider()
             st.write("#### User Data Consent")
             default_csv_directory = os.path.join(self.current_working_directory, "data")
-            default_contact = self.userdata["CONTACT"]
-            st.write(f"Union Neurotech conducts ongoing research in building better Brain Computer Interfaces. \
+            # default_contact = self.userdata["CONTACT"]
+            default_contact = "unionneurotech@gmail.com"
+            st.info(f"Union Neurotech conducts ongoing research in building better Brain Computer Interfaces. \
                          By consenting to participate in this research, you agree to allow Union Neurotech to use your data \
                          for research purposes. \nYour data will be anonymized and will not be shared with any third parties. \
                          \n With your data we can train machines to get better at understanding and interpreting the human mind.\
@@ -231,11 +246,12 @@ class BrowserUI:
                         self.connect_board(self.CURRENT_BOARD_ID, port_param)
                         st.session_state['connected'] = True
                         self.connected = True
-                        
                         st.success(f"Successfully connected `{self.CURRENT_BOARD}` Streaming Device.]")
-                    except:
-                        st.write("##### :red[Failed to connect to Streaming Device. Please check your connection and try again.]")
 
+                        st.info(f"Currently has {len(self.EEG_CHANNELS)} channels.")
+                    except Exception as e:
+                        st.write("##### :red[Failed to connect to Streaming Device. Please check your connection and try again.]")
+                        st.error(e)
             else:
                 st.write("### Disconnect from the Streaming Device.")
                 if st.button(label="Disconnect", help="Disconnect from the Streaming Device. You may want to rerun with `R` after clicking"):
@@ -256,7 +272,32 @@ class BrowserUI:
                 self.collection_time = st.number_input("Enter the number of seconds you want to collect data for: ", min_value=1, max_value=600, value=60, step=1, help="Enter the number of seconds you want to collect data for.")
                 if st.button(label="Start", help="Start collecting data from the Streaming Device."):
                     
+
                     data = self.stream_data()
+                    
+                    st.divider()
+                    st.markdown("### Raw Data: ")
+                    st.info("The following is the raw data output from the board. This is the data that is processed \
+                        further used to generate the artwork.")
+
+                    try:
+                        with st.expander("Checkout raw data."):
+                            st.subheader(f"#### Raw Data")
+                            st.info(f"The y axis is the channels in all data. The x axis is the time samples. Note that we are only intersted in the first {len(self.EEG_CHANNELS)} channels as those correspond to EEG. The rest are Accelorometer Data, Battery Level, and more!")
+                            st.dataframe(data)
+
+                    except Exception as e:
+                        st.error(e)
+
+                    
+                    fig, ax = generate_raw_plot(boardID=self.CURRENT_BOARD_ID, data=data, transpose=False, title="Raw EEG Data Plot", show=False, save=False, filename="raw_plot.png", show_progress=False)
+
+                    # Display the plot in Streamlit
+                    
+                    st.pyplot(fig)
+                    st.info("This is what the data looks like before we filter it and turn it into an image!")
+                    
+                    st.divider()
 
                     # Get the features from data
 

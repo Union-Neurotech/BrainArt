@@ -33,7 +33,7 @@ def read_userdata():
     with open(userdata_path, "r") as f:
         for line in f.readlines():
             var, val = line.split(": ")
-            data[var] = val
+            data[var] = val.split("\n")[0]
     return data
 
 def update_userdata(variable:str, value):
