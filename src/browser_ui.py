@@ -4,7 +4,7 @@ import os
 from assets import board_id_pairs, read_userdata, update_userdata
 
 # local imports
-from communications import Comms
+# from communications import Comms
 
 import brainflow
 from brainflow import BoardIds, BrainFlowInputParams, BoardShim, BrainFlowError, BrainFlowClassifiers, BrainFlowMetrics, DataFilter
@@ -55,6 +55,7 @@ class BrowserUI:
         if 'EEG_CHANNELS' not in st.session_state:
             st.session_state['EEG_CHANNELS'] = None
         self.EEG_CHANNELS = st.session_state['EEG_CHANNELS']
+
         BoardShim.enable_dev_board_logger()
         params = BrainFlowInputParams()
 
@@ -80,7 +81,11 @@ class BrowserUI:
         self.EEG_CHANNELS = st.session_state['EEG_CHANNELS']
 
         try:
-            st.write(st.session_state)
+            with st.expander("[For Debugging] Session State:"):
+                st.write(st.session_state)
+            with st.expander("[For Debugging] Board Description:"):
+                board_descr = BoardShim.get_board_descr(board_id)
+                st.write("Board Description: ", board_descr)
         except:
             st.text("No session state available. or failed to print :(")
     def disconnect_board(self):
@@ -154,6 +159,7 @@ class BrowserUI:
 
         # If prerecorded data is selected, show a file upload button
         if data_source == "Prerecorded":
+            st.info("Currently this code only supports LIVE. Prerecorded data usage will be added soon. :smile:")
             uploaded_file = st.file_uploader("Choose a file", type="csv")
             if uploaded_file is not None:
                 st.write("file uploaded.")
@@ -217,7 +223,7 @@ class BrowserUI:
                          \n With your data we can train machines to get better at understanding and interpreting the human mind.\
                          If you have any questions, please contact us at {default_contact}.\
                          \nThis has no affiliation with the Union College Undergraduate Research Program as of current and functions as independent research.")
-            collect_data_choice = st.radio("Do you consent to participate in this research?", ("Yes", "No"), help="Select Yes to consent to participate in this research.", horizontal=True)
+            collect_data_choice = st.radio("Do you consent to participate in this research?", ("No", "Yes"), help="Select Yes to consent to participate in this research.", horizontal=True)
 
             if collect_data_choice == "Yes":
                 self.collect_data = True
@@ -226,7 +232,8 @@ class BrowserUI:
                 st.text_input("Please enter your email: ", help="Enter your email to be used in the data collection process.")
                 st.write("These will be used to keep track of who has provided data and keep track of affirmative consent. Your contact information\
                          will not be in any way connected to your data. This is only for our records. There will be no way of linking your data back to you.")
-
+            else:
+                st.info("By not consenting, You will still be able to generate images, but your data will not be saved.")
             # --------------------------------------------------------------
             # Connect Board
             st.divider()
@@ -262,6 +269,15 @@ class BrowserUI:
                     except:
                         st.write("##### :red[Failed to disconnect from Streaming Device. Please check your connection and try again.]")
                     self.connected = False
+                if st.session_state['connected']: st.success(f"Successfully connected `{self.CURRENT_BOARD}` Streaming Device.]")
+                try:
+                    with st.expander("[For Debugging] Session State:"):
+                        st.write(st.session_state)
+                    with st.expander("[For Debugging] Board Description:"):
+                        board_descr = BoardShim.get_board_descr(self.CURRENT_BOARD_ID)
+                        st.write("Board Description: ", board_descr)
+                except:
+                    st.text("No session state available. or failed to print :(")
 
 
             # --------------------------------------------------------------
@@ -269,6 +285,9 @@ class BrowserUI:
             if self.connected:
                 st.divider()
                 st.write("### Begin Data Collection.")
+                st.info("""
+                Pro Tip! \n
+                If you dont want to disconnect the device, you can just re-run and start the data collection again. Click 'R' to re-run.""")
                 self.collection_time = st.number_input("Enter the number of seconds you want to collect data for: ", min_value=1, max_value=600, value=60, step=1, help="Enter the number of seconds you want to collect data for.")
                 if st.button(label="Start", help="Start collecting data from the Streaming Device."):
                     
@@ -282,15 +301,21 @@ class BrowserUI:
 
                     try:
                         with st.expander("Checkout raw data."):
-                            st.subheader(f"#### Raw Data")
+                            st.write("#### Raw Data")
                             st.info(f"The y axis is the channels in all data. The x axis is the time samples. Note that we are only intersted in the first {len(self.EEG_CHANNELS)} channels as those correspond to EEG. The rest are Accelorometer Data, Battery Level, and more!")
                             st.dataframe(data)
 
                     except Exception as e:
                         st.error(e)
 
+                    # Generate Plot:
+
+                    descale_weight = 10000
+
+                    if self.CURRENT_BOARD.lower() == "synthetic":
+                        descale_weight = 1000
                     
-                    fig, ax = generate_raw_plot(boardID=self.CURRENT_BOARD_ID, data=data, transpose=False, title="Raw EEG Data Plot", show=False, save=False, filename="raw_plot.png", show_progress=False)
+                    fig, ax = generate_raw_plot(boardID=self.CURRENT_BOARD_ID, data=data, transpose=False, title="Raw EEG Data Plot", show=False, save=False, descale_weight=descale_weight, filename="raw_plot.png", show_progress=False)
 
                     # Display the plot in Streamlit
                     

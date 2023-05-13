@@ -9,6 +9,10 @@
 # Description:
 # This file contains the methods used to communicate with the Electrophysiological Recording Equipment.
 
+
+# NOTICE:
+# As of current this is being unused. May be integrated in future iteraations
+
 import brainflow
 
 from brainflow import BoardIds, BrainFlowInputParams, BoardShim, BrainFlowError, BrainFlowClassifiers, BrainFlowMetrics

@@ -58,3 +58,8 @@ def update_userdata(variable:str, value):
         for key, value in data.items():
             content = key.upper() + ": " + value
             f.writelines(content)
+
+if __name__ == "__main__":
+    userdata = read_userdata()
+
+    print(userdata)
