@@ -16,6 +16,91 @@ from brainflow.data_filter import DataFilter, WindowOperations, DetrendOperation
 import numpy as np
 import pandas as pd
 
+
+
+# Feature Vector Extraction
+
+def get_feature_vector(data:pd.DataFrame, boardID:int):
+    """
+    Gets a vector containing features extracted from the data
+
+    Returns:
+        :feature_vector: An n-index array containing the features extracted from the data
+        :normalized_feature_vector: A normalized version of the feature vector
+        :feature_names: A list of the names of the features in the feature vector
+        :feature_vector_dict: A dictionary mapping feature names to their respective values
+        :normalized feature_vector_dict: A dictionary mapping feature names to their respective values
+        :feature_vector_omnibus: A dictionary mapping a feature_vector_dict and normalized feature_vector_dict to each channel
+    """
+    # Bandpower makes sure that data is of the right shape but just in case we check here
+    
+
+    bands_quantity = 5
+    eeg_channels = BoardShim.get_eeg_channels(boardID)
+    eeg_channel_names = BoardShim.get_eeg_names(boardID)
+    num_eeg_channels = len(eeg_channels)
+    num_channels, num_samples = data[:len(num_eeg_channels)].shape
+
+    if data.shape[0] != len(num_eeg_channels):
+        data = data[:len(num_eeg_channels)]
+
+    global_feature_vector = np.zeros(bands_quantity)
+    feature_names = [ "alpha", "beta", "delta", "theta","gamma"] # These are stored in order of prominence in the EEG spectrum
+
+    feature_vector_dict = {}
+
+    feature_omnibus = {}
+
+    
+
+    # Get Bandpower Feature Vector for All channels
+    for channel in range(num_channels):
+
+        current_eeg_channel = eeg_channels[channel]
+
+        overall_alpha, alpha_channelpairs = get_alpha_band(data[channel], boardID)
+        overall_beta, beta_channelpairs   = get_beta_band(data[channel], boardID)
+        overall_delta, delta_channelpairs = get_delta_band(data[channel], boardID)
+        overall_theta, theta_channelpairs = get_theta_band(data[channel], boardID)
+        overall_gamma, gamma_channelpairs = get_gamma_band(data[channel], boardID)
+
+        # Add to global feature vector
+        local_feature_vector = np.array([overall_alpha, overall_beta, overall_delta, overall_theta, overall_gamma])
+        global_feature_vector = (global_feature_vector + local_feature_vector)/(channel+1)
+    
+    
+
+
+    # Get Bandpower Feature Vector for each channel, stored in a dictionary pairing them with each name
+
+    # Get Concentration, Mindfullness, and Relaxation featyure vector
+
+    # Return the concatenation of all feature vectors
+    pass
+
+
+# ML Methods
+
+def get_concentration_value(data:pd.DataFrame):
+    """
+    Gets the concetration value from the data
+    """
+    pass
+
+def get_mindfullness_value(data:pd.DataFrame):
+    """
+    Gets the mindfulness value from the data
+    """
+    pass
+
+def get_relaxation_value(data:pd.DataFrame):
+    """
+    Gets the relaxation value from the data
+    """
+    pass
+
+# Bandpower Extraction Methods
+
 def get_bandpower(data: pd.DataFrame, lower_cutoff:float, upper_cuttoff:float, boardID:int, useNotch:bool=True):
     """
     Apply a bandpass filter and return the estimated power of the signal in said band
@@ -158,8 +243,9 @@ def get_gamma_band(data:pd.DataFrame, boardID:int, useNotch:bool=True):
 
 
 
-
 if __name__ == "__main__":
+    
+    pass
 
     # Test the get_bandpower method
 
