@@ -19,6 +19,23 @@ import pandas as pd
 import os
 
 
+# Current Functioning Methods:
+# - get_simple_feature_vector
+# - get_concentration_value
+# - get_mindfulness_value
+# - get_relaxation_value
+# - get_ML_prediction_value
+
+# TODO:
+# - get_feature_vector
+# - get_alpha_band
+# - get_beta_band
+# - get_delta_band
+# - get_theta_band
+# - get_gamma_band
+# - get_bandpower
+# - get_bandpower_channel_pairs
+
 
 # Feature Vector Extraction
 

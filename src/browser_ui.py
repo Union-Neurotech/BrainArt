@@ -387,7 +387,6 @@ class BrowserUI:
                     # Handle saving data
                     # TODO: Handle Saving data
 
-
                     image_path = self.generate_image(feature_vector)
 
                     # Handle displaying image
