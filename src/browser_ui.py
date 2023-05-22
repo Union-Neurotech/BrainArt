@@ -163,11 +163,12 @@ class BrowserUI:
             # get the date
             date = time.strftime("%Y_%m_%d_%H_%M_%S") 
             generic_image_name = str(date)
-            self.image_name = f"{generic_image_name}.jpg"
-
+            image_name = f"{generic_image_name}.jpg"
+        else: 
+            image_name = f"{self.image_name}.jpg"
         n = NumpyArtGenerator(resolution=resolution, feature_vector=features, num_layers=num_layers, layer_width=layer_width, activation_name=activation_name)
         n.run(verbose=True)
-        image_path = n.save_image(self.image_name, self.image_directory)
+        image_path = n.save_image(image_name, self.image_directory)
         return image_path        
     
     def show_prompts(self):
