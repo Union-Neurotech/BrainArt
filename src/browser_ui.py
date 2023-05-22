@@ -35,7 +35,7 @@ class BrowserUI:
         LOGO = Image.open(logo_path)
         st.image(image=LOGO, caption="Union Neurotech 2023", width=200)
         st.title(title)
-
+        
         if 'connected' not in st.session_state:
             st.session_state['connected'] = False
 

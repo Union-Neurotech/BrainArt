@@ -8,6 +8,7 @@ echo Currently in: %cd%
 echo ------------------------------------------
 
 
+
 call .esp\Scripts\activate.bat
 
 pause
@@ -23,4 +24,4 @@ pause
 echo Starting BrainArt. This may take a moment to load.
 echo.
 
-python src\run.py
+streamlit run src/BrainArt.py
