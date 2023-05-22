@@ -52,6 +52,10 @@ class BrowserUI:
             st.session_state['EEG_DATA'] = None
         self.EEG_DATA = st.session_state['EEG_DATA']
 
+        if 'image_name' not in st.session_state:
+            st.session_state['image_name'] = None
+        self.image_name = st.session_state['image_name']
+
         if 'EEG_CHANNELS' not in st.session_state:
             st.session_state['EEG_CHANNELS'] = None
         self.EEG_CHANNELS = st.session_state['EEG_CHANNELS']
@@ -147,12 +151,25 @@ class BrowserUI:
 
         return feature_vector
 
-    def generate_image(self, features):
+    def generate_image(self, features, resolution=(512, 512), num_layers=10, layer_width=18, activation_name="tanh", verbose=True):
         """
         Generates an image from features of EEG
         """
-        pass
+        from generation import NumpyArtGenerator
 
+ 
+        if self.image_name == "": 
+            # Make a generic image name based on the data and time
+            # get the date
+            date = time.strftime("%Y_%m_%d_%H_%M_%S") 
+            generic_image_name = str(date)
+            self.image_name = f"{generic_image_name}.jpg"
+
+        n = NumpyArtGenerator(resolution=resolution, feature_vector=features, num_layers=num_layers, layer_width=layer_width, activation_name=activation_name)
+        n.run(verbose=True)
+        image_path = n.save_image(self.image_name, self.image_directory)
+        return image_path        
+    
     def show_prompts(self):
         """
         Show all prompts for starting the Brain Artwork program
@@ -293,9 +310,12 @@ class BrowserUI:
                 Pro Tip! \n
                 If you dont want to disconnect the device, you can just re-run and start the data collection again. Click 'R' to re-run.""")
                 self.collection_time = st.number_input("Enter the number of seconds you want to collect data for: ", min_value=1, max_value=600, value=60, step=1, help="Enter the number of seconds you want to collect data for.")
+                
+                self.image_name = st.text_input("Enter the name of the image you want to generate: ", help="Enter the name of the image you want to generate. This will be used to save the image.")    
+                st.session_state['image_name'] = self.image_name
+                
                 if st.button(label="Start", help="Start collecting data from the Streaming Device."):
                     
-
                     data = self.stream_data()
                     
                     st.divider()
@@ -332,6 +352,7 @@ class BrowserUI:
 
                     feature_vector = self.generate_feature_vector(data)
 
+                    print(f"Feature Vector: {feature_vector}")
                     # Display the feature vector
                     st.write("#### Feature Vector")
                     st.info("This is the feature vector that is used to generate the artwork. It is a 1D array of numbers that represent the data collected from the board.")
@@ -387,16 +408,24 @@ class BrowserUI:
                     # Handle saving data
                     # TODO: Handle Saving data
 
-                    image_path = self.generate_image(feature_vector)
+                    st.divider()
+                    st.write("Generated Image: ")
+
+                    do_name_prompt = True
+                    image_path = self.generate_image(resolution=(1920, 1080), features=feature_vector, num_layers=10, layer_width=9, activation_name="tanh", verbose=True)
 
                     # Handle displaying image
+                    self.display_artwork(image_path)
+                    
+                    # Handle saving image
+                    st.divider()
 
-                    # self.display_artwork(image_path)
+                    st.info("Dont like the Image? Click R to re-run and generate a new one!")
 
-    def display_artwork(self, artwork):
-        pass
-        # st.image(artwork)
+    def display_artwork(self, image_path):
+        from PIL import Image
+        image = Image.open(image_path)
+        st.image(image, caption=f"Generated Image: {self.image_name}", width=700)
 
 if __name__ == "__main__":
-
     webapp = BrowserUI(title="Brain Generated Artwork Prototype")
