@@ -335,7 +335,7 @@ class BrowserUI:
 
                     # Generate Plot:
 
-                    descale_weight = 10000
+                    descale_weight = 1000
 
                     if self.CURRENT_BOARD.lower() == "synthetic":
                         descale_weight = 1000
