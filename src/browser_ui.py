@@ -60,6 +60,14 @@ class BrowserUI:
             st.session_state['EEG_CHANNELS'] = None
         self.EEG_CHANNELS = st.session_state['EEG_CHANNELS']
 
+        if "collect_data" not in st.session_state:
+            st.session_state["collect_data"] = False
+        self.collect_data = st.session_state["collect_data"]
+
+        if 'USER_DATA' not in st.session_state:
+            st.session_state['USER_DATA'] = None
+        self.USER_DATA = st.session_state['USER_DATA']
+
         BoardShim.enable_dev_board_logger()
         params = BrainFlowInputParams()
 
@@ -171,6 +179,46 @@ class BrowserUI:
         image_path = n.save_image(image_name, self.image_directory)
         return image_path        
     
+    def save_data(self, userdata:dict, data):
+
+        import csv
+        import os
+
+        current_filepath = os.path.realpath(__file__)
+        current_directory = os.path.dirname(current_filepath)
+        output_directory = os.path.join(current_directory, ".." , 'data')
+        datetime = time.strftime("%Y_%m_%d_%H_%M_%S")
+
+        def create_folder(folder_path):
+            try:
+                os.mkdir(folder_path)
+                print(f"Folder created successfully: {folder_path}")
+            except FileExistsError:
+                print(f"Folder already exists: {folder_path}")
+            except Exception as e:
+                print(f"Error occurred while creating folder: {e}")
+
+        def save_dict_to_csv(dictionary, filename):
+            keys = dictionary.keys()
+            with open(filename, 'w', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=keys)
+                writer.writeheader()
+                writer.writerow(dictionary)
+
+
+        new_output_folder = os.path.join(output_directory, datetime)
+        create_folder(new_output_folder)
+
+        output_userdata_path = os.path.join(new_output_folder, f'{datetime}_userdata.csv')
+        # Save dictionary as CSV
+        save_dict_to_csv(userdata, output_userdata_path)
+
+        # Save brainflow data
+        data_file_path = os.path.join(new_output_folder, f'{datetime}_recording_data.csv')
+        DataFilter.write_file(data,data_file_path, 'w')
+        
+        print(f"File Saved at {new_output_folder}")
+
     def show_prompts(self):
         """
         Show all prompts for starting the Brain Artwork program
@@ -234,6 +282,8 @@ class BrowserUI:
 
             # --------------------------------------------------------------
             # User Data Prompt
+            self.collect_data = st.session_state["collect_data"]
+
             st.divider()
             st.write("#### User Data Consent")
             default_csv_directory = os.path.join(self.current_working_directory, "data")
@@ -248,14 +298,18 @@ class BrowserUI:
             collect_data_choice = st.radio("Do you consent to participate in this research?", ("No", "Yes"), help="Select Yes to consent to participate in this research.", horizontal=True)
 
             if collect_data_choice == "Yes":
+                self.USER_DATA = {}
                 self.collect_data = True
                 st.write("Thank you for choosing to participate in our research!")
-                st.text_input("Please enter your name: ", help="Enter your name to be used in the data collection process.")
-                st.text_input("Please enter your email: ", help="Enter your email to be used in the data collection process.")
+                self.USER_DATA['username'] = st.text_input("Please enter your name: ", help="Enter your name to be used in the data collection process.")
+                self.USER_DATA['email'] = st.text_input("Please enter your email: ", help="Enter your email to be used in the data collection process.")
                 st.write("These will be used to keep track of who has provided data and keep track of affirmative consent. Your contact information\
                          will not be in any way connected to your data. This is only for our records. There will be no way of linking your data back to you.")
             else:
                 st.info("By not consenting, You will still be able to generate images, but your data will not be saved.")
+                self.USER_DATA = {}
+            st.session_state['USER_DATA'] = self.USER_DATA
+
             # --------------------------------------------------------------
             # Connect Board
             st.divider()
@@ -301,6 +355,18 @@ class BrowserUI:
                 except:
                     st.text("No session state available. or failed to print :(")
 
+            # Prompt for Emotion Type
+            if self.connected and self.collect_data: 
+                st.divider()
+                st.info("You opted to save some data. Your image generation will involve an extra feature!")
+                st.write("#### Emotion Classifier Training Data Collection")
+                # st.write("Please Reference the Chart Below and select the appropriate emotion you will try to think of . . .")
+                st.info("Emotion Positivity indicates whether an emotion is positive or negative. Emotion Intensity indicates how intense that emotion is")
+                valence = st.slider(label="Emotion Positivity", min_value=-100, max_value=100, step=10)
+                arousal = st.slider(label='Emotion Intensity', min_value=-100, max_value=100, step=10)
+                self.USER_DATA["arousal"] = arousal
+                self.USER_DATA["valence"] = valence
+                st.session_state["USER_DATA"] = self.USER_DATA # Save state
 
             # --------------------------------------------------------------
             # Start Data Collection
@@ -335,7 +401,7 @@ class BrowserUI:
 
                     # Generate Plot:
 
-                    descale_weight = 10000
+                    descale_weight = 1000
 
                     if self.CURRENT_BOARD.lower() == "synthetic":
                         descale_weight = 1000
@@ -408,6 +474,8 @@ class BrowserUI:
 
                     # Handle saving data
                     # TODO: Handle Saving data
+                    if self.collect_data:
+                        self.save_data(self.USER_DATA, data)
 
                     st.divider()
                     st.write("Generated Image: ")

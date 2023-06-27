@@ -8,6 +8,8 @@ SETX BRAINART %~dp0
 echo Environment Variable "BRAINART" set to %~dp0
 pause
 
+:: Just in case make sure that we stay in the right directory if we are in administrator mode
+cd %~dp0
 
 :: Check if .esp directory exists
 if not exist ".esp" (
