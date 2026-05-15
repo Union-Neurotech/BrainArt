@@ -22,6 +22,7 @@ call .esp\Scripts\activate.bat
 
 :: Install required packages
 echo Installing required packages...
+python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements.txt
 echo Packages installed.
 pause
