@@ -49,6 +49,13 @@
   width: 100%;
 }
 
+/* Force the WebGL canvas onto its own GPU compositing layer
+   so React DOM updates never cause a compositor re-upload */
+.gpu-layer {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
 /* ── Slider accent colours ──────────────────────────────────── */
 .eeg-slider-emotion { accent-color: #ff7846; }
 .eeg-slider-eeg     { accent-color: #50a0ff; }

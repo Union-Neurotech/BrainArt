@@ -8,17 +8,17 @@ interface Props {
 
 function BrainArtCanvas({ eegStateRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const glRef = useRef<WebGLRenderingContext | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, antialias: false }) ||
-               canvas.getContext("experimental-webgl", { preserveDrawingBuffer: true }) as WebGLRenderingContext;
-    if (!gl) {
-      console.error("WebGL required");
-      return;
-    }
+    
+    // Reuse existing context if already initialized (StrictMode re-mount)
+    const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, antialias: false, desynchronized: true }) ||
+           canvas.getContext("experimental-webgl", { preserveDrawingBuffer: true, antialias: false, desynchronized: true }) as WebGLRenderingContext;
+    if (!gl) return;
+    glRef.current = gl;
 
     // --- 1. SHADERS ---
     const VS = `attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}`;
@@ -116,14 +116,18 @@ function BrainArtCanvas({ eegStateRef }: Props) {
     // --- 3. STATE & RESIZE ---
     let W_ = 0, H_ = 0;
     const resize = () => {
-      W_ = canvas.parentElement?.clientWidth || window.innerWidth;
-      H_ = canvas.parentElement?.clientHeight || window.innerHeight;
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const w = parent.clientWidth;
+      const h = parent.clientHeight;
+      if (w === W_ && h === H_) return; // skip if unchanged — setting canvas.width clears the buffer
+      W_ = w; H_ = h;
       canvas.width = W_;
       canvas.height = H_;
       gl.viewport(0, 0, W_, H_);
       gl.uniform2f(UL.res, W_, H_);
     };
-    window.addEventListener("resize", resize);
+    window.addEventListener('resize', resize);
     resize();
 
     // --- 4. MOUSE INTERACTIONS ---
@@ -162,7 +166,7 @@ function BrainArtCanvas({ eegStateRef }: Props) {
       const md = 1 - E.mindfulness * 0.6, cb = E.concentration * 0.5, rs = E.relaxation * 0.4;
       
       const target = {
-        hue_shift: v, warm: v,
+        hue_shift: v, warm: -v,
         sat: 1.0 + absV * 1.2 + E.gamma * 1.5,
         zoom: 0.7 + (1 - a) * 0.5 + (1 - E.beta) * 0.5 + rs,
         complexity: 0.3 + a * 0.5 + E.beta * 0.4 + cb,
@@ -196,7 +200,7 @@ function BrainArtCanvas({ eegStateRef }: Props) {
 
     // --- CLEANUP ---
     return () => {
-      window.removeEventListener("resize", resize);
+      window.removeEventListener('resize', resize);
       // canvas.removeEventListener("mousemove", onMouseMove);
       // canvas.removeEventListener("mousedown", onMouseDown);
       // canvas.removeEventListener("mouseup", onMouseUp);
@@ -205,7 +209,7 @@ function BrainArtCanvas({ eegStateRef }: Props) {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="block w-full h-full" />;
+  return <canvas ref={canvasRef} className="absolute inset-0" />;
 }
 
 export default memo(BrainArtCanvas);

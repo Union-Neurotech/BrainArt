@@ -240,11 +240,9 @@ function App() {
       {/* Main row: art canvas + sidebar */}
       <div className="flex flex-1 overflow-hidden min-h-0">
 
-        {/* Art canvas — 16:9 aspect ratio, centered */}
-        <div className="flex-1 flex items-center justify-center overflow-hidden bg-black">
-          <div className="canvas-16-9">
-            <BrainArtCanvas eegStateRef={eegStateRef} />
-          </div>
+        {/* Art canvas — fills available space, shader handles aspect ratio */}
+        <div className="flex-1 relative overflow-hidden bg-black">
+          <BrainArtCanvas eegStateRef={eegStateRef} />
         </div>
 
         {/* Right sidebar */}
