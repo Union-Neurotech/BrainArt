@@ -1,26 +1,60 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
+@import "tailwindcss";
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
 :root {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
 }
 
+/* ── Range slider reset ──────────────────────────────────────── */
+.eeg-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+  cursor: pointer;
+}
+.eeg-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6);
+  transition: transform 0.1s;
+}
+.eeg-slider:active::-webkit-slider-thumb {
+  transform: scale(1.3);
+}
+.eeg-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+}
+
+/* ── Canvas aspect ratio ────────────────────────────────────── */
+.canvas-16-9 {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  max-height: 100%;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* ── Slider accent colours ──────────────────────────────────── */
+.eeg-slider-emotion { accent-color: #ff7846; }
+.eeg-slider-eeg     { accent-color: #50a0ff; }
+.eeg-slider-ml      { accent-color: #64e696; }
+
+/* hide everything else from the old scaffold */
 .container {
   margin: 0;
   padding-top: 10vh;

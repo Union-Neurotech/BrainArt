@@ -12,49 +12,59 @@ use serde::Serialize;
 use std::{thread, time::Duration};
 use tauri::Emitter;
 
-// Define the payload we will send to React
+/// Full EEG payload — matches the EegState interface in App.tsx
 #[derive(Clone, Serialize)]
 struct EEGPayload {
     valence: f32,
     arousal: f32,
     alpha: f32,
     beta: f32,
-    raw_waves: Vec<f32>, // Mock raw wave data for the uPlot graph
+    theta: f32,
+    delta: f32,
+    gamma: f32,
+    mindfulness: f32,
+    concentration: f32,
+    relaxation: f32,
+    raw_waves: Vec<f32>,
 }
 
-/// Starts a mock EEG stream on a background thread.
-/// Emits `eeg-data` events containing valence, arousal,
-/// band power (alpha/beta), and raw wave samples.
+/// Connect to the specified board and start streaming EEG data.
+/// Currently all board types run the synthetic mock stream.
 #[tauri::command]
-fn start_eeg_stream(app_handle: tauri::AppHandle) {
-    println!("Starting EEG stream...");
-    
-    // Spawn a background thread so we don't block the UI
+fn connect_board(board_id: String, app_handle: tauri::AppHandle) {
+    println!("Connecting to board: {}", board_id);
+
     thread::spawn(move || {
-        let mut tick: f32 = 0.0; // Used to simulate changing metrics over time
+        let mut tick: f32 = 0.0;
         loop {
-            // Simulate changing metrics
             let payload = EEGPayload {
-                valence: (tick * 0.05).sin() * 0.5 + 0.5,
-                arousal: (tick * 0.07).cos() * 0.5 + 0.5,
-                alpha: (tick * 0.02).sin().abs(),
-                beta: (tick * 0.03).cos().abs(),
-                raw_waves: vec![(tick * 0.5).sin(), (tick * 0.6).cos(), (tick * 0.7).sin()], 
+                valence:       (tick * 0.05).sin(),
+                arousal:       (tick * 0.07).cos(),
+                alpha:         (tick * 0.02).sin().abs(),
+                beta:          (tick * 0.03).cos().abs(),
+                theta:         (tick * 0.04).sin().abs(),
+                delta:         (tick * 0.015).cos().abs(),
+                gamma:         (tick * 0.06).sin().abs(),
+                mindfulness:   (tick * 0.01).sin() * 0.5 + 0.5,
+                concentration: (tick * 0.013).cos() * 0.5 + 0.5,
+                relaxation:    (tick * 0.008).sin() * 0.5 + 0.5,
+                raw_waves: vec![
+                    (tick * 0.5).sin(),
+                    (tick * 0.6).cos(),
+                    (tick * 0.7).sin(),
+                ],
             };
 
-            // Emit the event to the React frontend
             app_handle.emit("eeg-data", payload).unwrap();
-
             tick += 1.0;
-            // Sleep for ~33ms to simulate 30 FPS
-            thread::sleep(Duration::from_millis(33)); 
+            thread::sleep(Duration::from_millis(33));
         }
     });
 }
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![start_eeg_stream])
+        .invoke_handler(tauri::generate_handler![connect_board])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
