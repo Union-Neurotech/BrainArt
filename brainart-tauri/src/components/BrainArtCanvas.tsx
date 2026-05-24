@@ -127,17 +127,17 @@ export default function BrainArtCanvas({ eegStateRef }: Props) {
     resize();
 
     // --- 4. MOUSE INTERACTIONS ---
-    const mouse = { x: 0, y: 0, str: 0, down: false };
-    const toNDC = (cx: number, cy: number) => [((cx / W_) * 2 - 1) * (W_ / H_), -((cy / H_) * 2 - 1)];
+    // const mouse = { x: 0, y: 0, str: 0, down: false };
+    // const toNDC = (cx: number, cy: number) => [((cx / W_) * 2 - 1) * (W_ / H_), -((cy / H_) * 2 - 1)];
     
-    const onMouseMove = (e: MouseEvent) => { [mouse.x, mouse.y] = toNDC(e.clientX, e.clientY); if (mouse.down) mouse.str = Math.min(mouse.str + 0.07, 1.2); };
-    const onMouseDown = () => { mouse.down = true; mouse.str = 0.35; };
-    const onMouseUp = () => { mouse.down = false; };
+    // const onMouseMove = (e: MouseEvent) => { [mouse.x, mouse.y] = toNDC(e.clientX, e.clientY); if (mouse.down) mouse.str = Math.min(mouse.str + 0.07, 1.2); };
+    // const onMouseDown = () => { mouse.down = true; mouse.str = 0.35; };
+    // const onMouseUp = () => { mouse.down = false; };
     
-    canvas.addEventListener("mousemove", onMouseMove);
-    canvas.addEventListener("mousedown", onMouseDown);
-    canvas.addEventListener("mouseup", onMouseUp);
-    canvas.addEventListener("mouseleave", onMouseUp);
+    // canvas.addEventListener("mousemove", onMouseMove);
+    // canvas.addEventListener("mousedown", onMouseDown);
+    // canvas.addEventListener("mouseup", onMouseUp);
+    // canvas.addEventListener("mouseleave", onMouseUp);
 
     // --- 5. RENDER LOOP ---
     let t0 = performance.now();
@@ -146,7 +146,7 @@ export default function BrainArtCanvas({ eegStateRef }: Props) {
 
     const render = (ts: number) => {
       const elapsed = (ts - t0) / 1000;
-      if (!mouse.down) mouse.str = Math.max(0, mouse.str - 0.025);
+      // if (!mouse.down) mouse.str = Math.max(0, mouse.str - 0.025);
 
       // Read from the React Ref (this replaces your 'E' object)
       const E = eegStateRef.current;
@@ -175,7 +175,7 @@ export default function BrainArtCanvas({ eegStateRef }: Props) {
       gl.uniform1f(UL.u_complexity, V.complexity); gl.uniform1f(UL.u_chaos, V.chaos);
       gl.uniform1f(UL.u_radial, V.radial);
       gl.uniform1f(UL.u_offset_x, V.offset_x); gl.uniform1f(UL.u_offset_y, V.offset_y);
-      gl.uniform2f(UL.u_mouse, mouse.x, mouse.y); gl.uniform1f(UL.u_mouse_str, mouse.str);
+      // gl.uniform2f(UL.u_mouse, mouse.x, mouse.y); gl.uniform1f(UL.u_mouse_str, mouse.str);
       
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       animationId = requestAnimationFrame(render);
@@ -185,10 +185,10 @@ export default function BrainArtCanvas({ eegStateRef }: Props) {
     // --- CLEANUP ---
     return () => {
       window.removeEventListener("resize", resize);
-      canvas.removeEventListener("mousemove", onMouseMove);
-      canvas.removeEventListener("mousedown", onMouseDown);
-      canvas.removeEventListener("mouseup", onMouseUp);
-      canvas.removeEventListener("mouseleave", onMouseUp);
+      // canvas.removeEventListener("mousemove", onMouseMove);
+      // canvas.removeEventListener("mousedown", onMouseDown);
+      // canvas.removeEventListener("mouseup", onMouseUp);
+      // canvas.removeEventListener("mouseleave", onMouseUp);
       cancelAnimationFrame(animationId);
     };
   }, []);
