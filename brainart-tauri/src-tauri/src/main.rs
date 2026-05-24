@@ -1,4 +1,8 @@
 // src-tauri/src/main.rs
+
+//! Tauri backend — spawns a background thread that simulates EEG data
+//! and emits `eeg-data` events to the frontend at ~30 Hz.
+
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
@@ -6,7 +10,7 @@
 
 use serde::Serialize;
 use std::{thread, time::Duration};
-use tauri::Manager;
+use tauri::Emitter;
 
 // Define the payload we will send to React
 #[derive(Clone, Serialize)]
@@ -18,13 +22,16 @@ struct EEGPayload {
     raw_waves: Vec<f32>, // Mock raw wave data for the uPlot graph
 }
 
+/// Starts a mock EEG stream on a background thread.
+/// Emits `eeg-data` events containing valence, arousal,
+/// band power (alpha/beta), and raw wave samples.
 #[tauri::command]
 fn start_eeg_stream(app_handle: tauri::AppHandle) {
     println!("Starting EEG stream...");
     
     // Spawn a background thread so we don't block the UI
     thread::spawn(move || {
-        let mut tick = 0.0;
+        let mut tick: f32 = 0.0; // Used to simulate changing metrics over time
         loop {
             // Simulate changing metrics
             let payload = EEGPayload {
@@ -36,7 +43,7 @@ fn start_eeg_stream(app_handle: tauri::AppHandle) {
             };
 
             // Emit the event to the React frontend
-            app_handle.emit_all("eeg-data", payload).unwrap();
+            app_handle.emit("eeg-data", payload).unwrap();
 
             tick += 1.0;
             // Sleep for ~33ms to simulate 30 FPS
