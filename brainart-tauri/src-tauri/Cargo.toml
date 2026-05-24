@@ -21,12 +21,9 @@ tauri-build = { version = "2", features = [] }
 # Enable real EEG hardware support via BrainFlow.
 #
 # SETUP REQUIRED before enabling this feature:
-#   1. git clone https://github.com/brainflow-dev/brainflow  brainflow-sdk
+#   1. git clone https://github.com/brainflow-dev/brainflow
 #      (clone into the workspace root, one level above src-tauri/)
-#   2. Download the Windows pre-built libs from:
-#      https://github.com/brainflow-dev/brainflow/releases
-#      and extract the DLLs (BoardController.dll, DataHandler.dll, MLModule.dll)
-#      into  brainflow-sdk/rust_package/brainflow/lib/
+
 #   3. Uncomment the brainflow path dependency below and run:
 #        cargo build --features brainflow-hardware
 [features]
@@ -42,6 +39,6 @@ rustfft = "6.2"
 
 # BrainFlow Rust binding — NOT on crates.io; must be installed locally.
 # Uncomment the line below once you have completed the setup above:
-# brainflow = { path = "../brainflow-sdk/rust_package/brainflow", optional = true }
+brainflow = { path = "../brainflow/rust_package/brainflow", optional = true }
 ndarray = { version = "0.15", optional = true }
 

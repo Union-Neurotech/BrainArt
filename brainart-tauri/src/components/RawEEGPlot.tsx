@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { EegState } from "../App";
@@ -7,7 +7,7 @@ interface Props {
   eegStateRef: React.MutableRefObject<EegState>;
 }
 
-export default function RawEEGPlot({ eegStateRef }: Props) {
+function RawEEGPlot({ eegStateRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
 
@@ -107,3 +107,5 @@ export default function RawEEGPlot({ eegStateRef }: Props) {
     </div>
   );
 }
+
+export default memo(RawEEGPlot);

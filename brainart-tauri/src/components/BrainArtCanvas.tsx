@@ -1,12 +1,12 @@
 // src/components/BrainArtCanvas.tsx
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { EegState } from "../App";
 
 interface Props {
   eegStateRef: React.MutableRefObject<EegState>;
 }
 
-export default function BrainArtCanvas({ eegStateRef }: Props) {
+function BrainArtCanvas({ eegStateRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -144,9 +144,15 @@ export default function BrainArtCanvas({ eegStateRef }: Props) {
     let seed = 5; // We can make this dynamic later
     let animationId: number;
 
+    // EMA smoothed shader values — prevents flickering from rapid BrainFlow value changes
+    const SMOOTH = 0.04; // blend factor per frame (~60fps → ~0.4s time constant)
+    let smoothed = {
+      hue_shift: 0, warm: 0, sat: 1, zoom: 1.2, complexity: 0.5,
+      chaos: 0, radial: 0, speed: 0.03, warp: 0.5, offset_x: 0, offset_y: 0,
+    };
+
     const render = (ts: number) => {
       const elapsed = (ts - t0) / 1000;
-      // if (!mouse.down) mouse.str = Math.max(0, mouse.str - 0.025);
 
       // Read from the React Ref (this replaces your 'E' object)
       const E = eegStateRef.current;
@@ -155,7 +161,7 @@ export default function BrainArtCanvas({ eegStateRef }: Props) {
       const v = E.valence, a = E.arousal, absV = Math.abs(v);
       const md = 1 - E.mindfulness * 0.6, cb = E.concentration * 0.5, rs = E.relaxation * 0.4;
       
-      const V = {
+      const target = {
         hue_shift: v, warm: v,
         sat: 1.0 + absV * 1.2 + E.gamma * 1.5,
         zoom: 0.7 + (1 - a) * 0.5 + (1 - E.beta) * 0.5 + rs,
@@ -164,8 +170,14 @@ export default function BrainArtCanvas({ eegStateRef }: Props) {
         radial: E.alpha * 0.85,
         speed: (0.02 + E.delta * 0.12 + Math.max(a, 0) * 0.06) * md,
         warp: 0.3 + E.gamma * 0.6 + Math.max(a, 0) * 0.4,
-        offset_x: 0, offset_y: 0
+        offset_x: 0, offset_y: 0,
       };
+
+      // EMA blend toward target
+      (Object.keys(target) as (keyof typeof target)[]).forEach((k) => {
+        smoothed[k] += (target[k] - smoothed[k]) * SMOOTH;
+      });
+      const V = smoothed;
 
       // Push to Shaders
       gl.uniform1f(UL.t, elapsed); gl.uniform1f(UL.seed, seed);
@@ -195,3 +207,5 @@ export default function BrainArtCanvas({ eegStateRef }: Props) {
 
   return <canvas ref={canvasRef} className="block w-full h-full" />;
 }
+
+export default memo(BrainArtCanvas);
