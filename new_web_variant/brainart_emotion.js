@@ -46,7 +46,8 @@ gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
 const UL = {};
 ['res','t','seed','u_zoom','u_warp','u_speed','u_sat',
  'u_hue_shift','u_warm','u_complexity','u_chaos','u_radial',
- 'u_offset_x','u_offset_y','u_mouse','u_mouse_str', 'u_neutral']
+ 'u_offset_x','u_offset_y','u_mouse','u_mouse_str', 'u_neutral',
+ 'u_valence','u_arousal']
   .forEach(n => UL[n] = gl.getUniformLocation(prog, n));
 
 // ------- State -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------â”€
@@ -62,16 +63,17 @@ function emotionToVisuals() {
   const sharp = E.concentration * 0.5;
   const soft  = E.relaxation * 0.4;
   const shift_damper = 0.5; // Reduces impact of shift `v` to 35% of original, to avoid too extreme hues at high arousal levels
+  const ap = (a + 1) * 0.5;   // arousal 0..1
   return {
-    hue_shift:  v * shift_damper,  
+    hue_shift:  v * shift_damper,
     warm:       v,
     sat:        1.0 + absV * 1.2 + E.gamma * 1.5,
-    zoom:       0.7 + (1 - a) * 0.5 + (1 - E.beta) * 0.5 + soft,
-    complexity: 0.3 + a * 0.5 + E.beta * 0.4 + sharp,
+    zoom:       0.7 + (1 - ap) * 0.6 + (1 - E.beta) * 0.4 + soft,
+    complexity: 0.15 + ap * 1.1 + E.beta * 0.3 + sharp,   // arousal-led
     chaos:      E.theta * 1.8 * damp,
     radial:     E.alpha * 0.85,
     speed:      (0.02 + E.delta * 0.12 + Math.max(a, 0) * 0.06) * damp,
-    warp:       0.3 + E.gamma * 0.6 + Math.max(a, 0) * 0.4,
+    warp:       0.3 + E.gamma * 0.6 + ap * 0.4,
     offset_x:   0,
     offset_y:   0,
   };
@@ -117,6 +119,8 @@ function render(ts) {
   gl.uniform2f(UL.u_mouse,      mouse.x, mouse.y);
   gl.uniform1f(UL.u_mouse_str,  mouse.str);
   gl.uniform1f(UL.u_neutral, neutralMode ? 1.0 : 0.0);
+  gl.uniform1f(UL.u_valence, E.valence);   
+  gl.uniform1f(UL.u_arousal, E.arousal);   
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   requestAnimationFrame(render);
 }
