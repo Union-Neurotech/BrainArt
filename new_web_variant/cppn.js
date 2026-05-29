@@ -12,39 +12,43 @@ uniform float u_neutral;   // 0 = raw CPPN colors, 1 = emotion palette
 uniform float u_valence, u_arousal;
 
 // ---- Emotion palettes (circumplex corners). t = structural scalar in [0,1] ----
-vec3 Panger(float t){            // neg valence, high arousal -> fire
-  vec3 c = mix(vec3(0.12,0.0,0.0),  vec3(0.85,0.12,0.0), smoothstep(0.0,0.50,t));
-  c = mix(c, vec3(1.0,0.50,0.0),   smoothstep(0.45,0.78,t));
-  c = mix(c, vec3(1.0,0.92,0.25),  smoothstep(0.78,1.0,t));
-  return c;
-}
-vec3 Pjoy(float t){              // pos valence, high arousal -> vivid warm
-  vec3 c = mix(vec3(0.75,0.0,0.45), vec3(1.0,0.35,0.0), smoothstep(0.0,0.45,t));
-  c = mix(c, vec3(1.0,0.82,0.10),  smoothstep(0.45,0.80,t));
-  c = mix(c, vec3(1.0,1.0,0.85),   smoothstep(0.80,1.0,t));
-  return c;
-}
-vec3 Psad(float t){              // neg valence, low arousal -> cold blue
-  vec3 c = mix(vec3(0.02,0.03,0.13), vec3(0.10,0.20,0.45), smoothstep(0.0,0.50,t));
-  c = mix(c, vec3(0.26,0.36,0.62),  smoothstep(0.50,0.85,t));
-  c = mix(c, vec3(0.50,0.55,0.66),  smoothstep(0.85,1.0,t));
-  return c;
-}
-vec3 Pcalm(float t){             // pos valence, low arousal -> teal/green
-  vec3 c = mix(vec3(0.0,0.14,0.14), vec3(0.0,0.42,0.36), smoothstep(0.0,0.50,t));
-  c = mix(c, vec3(0.32,0.72,0.55), smoothstep(0.50,0.85,t));
-  c = mix(c, vec3(0.78,0.94,0.82), smoothstep(0.85,1.0,t));
-  return c;
-}
+// vec3 Panger(float t){            // neg valence, high arousal -> fire
+//   vec3 c = mix(vec3(0.12,0.0,0.0),  vec3(0.85,0.12,0.0), smoothstep(0.0,0.50,t));
+//   c = mix(c, vec3(1.0,0.50,0.0),   smoothstep(0.45,0.78,t));
+//   c = mix(c, vec3(1.0,0.92,0.25),  smoothstep(0.78,1.0,t));
+//   return c;
+// }
+// vec3 Pjoy(float t){              // pos valence, high arousal -> vivid warm
+//   vec3 c = mix(vec3(0.75,0.0,0.45), vec3(1.0,0.35,0.0), smoothstep(0.0,0.45,t));
+//   c = mix(c, vec3(1.0,0.82,0.10),  smoothstep(0.45,0.80,t));
+//   c = mix(c, vec3(1.0,1.0,0.85),   smoothstep(0.80,1.0,t));
+//   return c;
+// }
+// vec3 Psad(float t){              // neg valence, low arousal -> cold blue
+//   vec3 c = mix(vec3(0.02,0.03,0.13), vec3(0.10,0.20,0.45), smoothstep(0.0,0.50,t));
+//   c = mix(c, vec3(0.26,0.36,0.62),  smoothstep(0.50,0.85,t));
+//   c = mix(c, vec3(0.50,0.55,0.66),  smoothstep(0.85,1.0,t));
+//   return c;
+// }
+// vec3 Pcalm(float t){             // pos valence, low arousal -> teal/green
+//   vec3 c = mix(vec3(0.0,0.14,0.14), vec3(0.0,0.42,0.36), smoothstep(0.0,0.50,t));
+//   c = mix(c, vec3(0.32,0.72,0.55), smoothstep(0.50,0.85,t));
+//   c = mix(c, vec3(0.78,0.94,0.82), smoothstep(0.85,1.0,t));
+//   return c;
+// }
 
-vec3 emotionPalette(float t){
+vec3 emotionTint(){
   float vp = clamp(u_valence*0.5 + 0.5, 0.0, 1.0);   // 0 neg -> 1 pos
   float ap = clamp(u_arousal*0.5 + 0.5, 0.0, 1.0);   // 0 low -> 1 high
   float wSad   = (1.0-vp)*(1.0-ap);
   float wCalm  =      vp *(1.0-ap);
   float wAnger = (1.0-vp)*     ap;
   float wJoy   =      vp *     ap;
-  return Psad(t)*wSad + Pcalm(t)*wCalm + Panger(t)*wAnger + Pjoy(t)*wJoy;
+  vec3 cAnger = vec3(1.00, 0.40, 0.08);   // fiery orange
+  vec3 cJoy   = vec3(1.00, 0.78, 0.22);   // warm gold
+  vec3 cSad   = vec3(0.30, 0.45, 0.95);   // cool blue
+  vec3 cCalm  = vec3(0.28, 0.85, 0.70);   // teal/green
+  return cAnger*wAnger + cJoy*wJoy + cSad*wSad + cCalm*wCalm;
 }
 
 // Smooth tanh approximation (avoids true exp overflow)
@@ -138,24 +142,27 @@ void main() {
   float cg = th(W(3.,0.,1.)*p0 + W(3.,1.,1.)*p1 + W(3.,2.,1.)*p2 + W(3.,3.,1.)*m1 + W(3.,4.,1.)*m4 + Wb(3.,1.));
   float cb = th(W(3.,0.,2.)*p0 + W(3.,1.,2.)*p1 + W(3.,2.,2.)*p2 + W(3.,3.,2.)*m2 + W(3.,4.,2.)*m5 + Wb(3.,2.));
 
-  // Structure: collapse the network RGB to a single scalar that walks the palette
-  vec3 net = vec3(cr, cg, cb) * .5 + .5;
-  float tt = clamp(dot(net, vec3(0.38, 0.34, 0.28)), 0.0, 1.0);
+  // Full CPPN colour = the variety. Keep it.
+  vec3 base = vec3(cr, cg, cb) * .5 + .5;
+  float lum = dot(base, vec3(0.2126, 0.7152, 0.0722));
 
-  // Emotion-driven palette (neutral mode)
-  vec3 emo = emotionPalette(tt);
-  float elum = dot(emo, vec3(0.2126, 0.7152, 0.0722));
-  emo = mix(vec3(elum), emo, clamp(u_sat, 0.0, 2.2));   // u_sat>1 = punchier
+  // Emotion grade: lean the whole image toward an emotion temperature,
+  // multiply-tint preserves relative hue differences (greens vs blues survive).
+  vec3  tint      = emotionTint();
+  float intensity = clamp(length(vec2(u_valence, u_arousal)) / 1.41421, 0.0, 1.0);
+  vec3  graded    = base * mix(vec3(1.0), tint * 1.7, intensity * 0.8); // Controls how much emotion takes over at corners, tint * 1.7 is the off-temp colors
 
-  // Old CPPN-coloured look (when neutral mode is off)
-  vec3 raw = net;
-  float rlum = dot(raw, vec3(0.2126, 0.7152, 0.0722));
-  raw = mix(vec3(rlum), raw, u_sat);
+  float glum = dot(graded, vec3(0.2126, 0.7152, 0.0722));
+  graded = mix(vec3(glum), graded, clamp(u_sat, 0.0, 2.2));
+
+  // Legacy look (neutral mode off): original hueRot + warm/cool tint
+  vec3 raw = base;
+  raw = mix(vec3(lum), raw, u_sat);
   raw = hueRot(raw, u_hue_shift * 1.0472);
   raw.r = mix(raw.r, min(raw.r * 1.18, 1.), max( u_warm, 0.) * .35);
   raw.b = mix(raw.b, min(raw.b * 1.18, 1.), max(-u_warm, 0.) * .35);
 
-  vec3 col = mix(raw, emo, u_neutral);
+  vec3 col = mix(raw, graded, u_neutral);
   col = clamp(col, 0., 1.);
   gl_FragColor = vec4(col, 1.);
 }
