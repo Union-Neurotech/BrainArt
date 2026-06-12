@@ -328,3 +328,92 @@ function liveTick() {
   requestAnimationFrame(liveTick);
 }
 requestAnimationFrame(liveTick);
+
+// ===================================================================
+// CALIBRATION  (per-user affine rescale so the dial fills -1..1)
+// -------------------------------------------------------------------
+// Play a clip for each condition, click its button to record the model's
+// raw output for CALIB.secs, then "fit & save". The server fits a per-axis
+// affine and switches live output to it (persisted in muse_va_calib.json).
+// ===================================================================
+const CALIB = {
+  secs: 90,
+  busy: false,
+  done: new Set(),
+  conditions: [
+    { label: 'exciting / joy', v:  0.8, a:  0.8 },
+    { label: 'fear / anger',   v: -0.8, a:  0.8 },
+    { label: 'calm / tender',  v:  0.7, a: -0.6 },
+    { label: 'sad',            v: -0.7, a: -0.5 },
+    { label: 'neutral',        v:  0.0, a: -0.2 },
+  ],
+};
+
+function calibSend(obj) {
+  if (LIVE.ws && LIVE.ws.readyState === 1) { LIVE.ws.send(JSON.stringify(obj)); return true; }
+  return false;
+}
+
+function recordCondition(cond, chip) {
+  if (CALIB.busy) return;
+  if (!calibSend({ cmd:'calib_clip', label:cond.label, v:cond.v, a:cond.a, secs:CALIB.secs })) {
+    setCalibMsg('go live first (not connected)'); return;
+  }
+  CALIB.busy = true;
+  document.querySelectorAll('.calib-chip').forEach(c => c.style.opacity = .4);
+  let left = CALIB.secs;
+  const stat = document.getElementById('calibMsg');
+  const tick = setInterval(() => {
+    left -= 1;
+    stat.textContent = `recording "${cond.label}" … ${left}s  (play the clip now)`;
+    if (left <= 0) {
+      clearInterval(tick);
+      CALIB.busy = false;
+      CALIB.done.add(cond.label);
+      chip.style.background = 'rgba(100,230,150,.18)';
+      chip.style.borderColor = 'rgba(100,230,150,.5)';
+      document.querySelectorAll('.calib-chip').forEach(c => c.style.opacity = 1);
+      setCalibMsg(`captured ${CALIB.done.size}/${CALIB.conditions.length}. Fit & save when ≥2 done.`);
+    }
+  }, 1000);
+}
+
+function setCalibMsg(t) { const m = document.getElementById('calibMsg'); if (m) m.textContent = t; }
+
+(function addCalibUI() {
+  const scroll = document.getElementById('panel-scroll');
+  const sec = document.createElement('div');
+  sec.className = 'sec';
+  sec.innerHTML = `
+    <div class="sec-title">Calibration <span style="color:rgba(255,255,255,.15)">(fills −1…1)</span></div>
+    <div class="chips" id="calibChips"></div>
+    <div style="display:flex;gap:7px;margin-top:9px">
+      <button class="btn" id="bCalibFit" style="flex:1">fit &amp; save</button>
+      <button class="btn" id="bCalibReset" style="flex:0 0 auto;padding:8px 10px">reset</button>
+    </div>
+    <div id="calibMsg" style="font-size:9px;color:rgba(255,255,255,.3);margin-top:8px;line-height:1.4">
+      go live, then record each condition while playing a matching clip.</div>`;
+  // insert before the Presets section if present, else append
+  const presetSec = document.getElementById('presets')?.closest('.sec');
+  if (presetSec) scroll.insertBefore(sec, presetSec); else scroll.appendChild(sec);
+
+  const wrap = sec.querySelector('#calibChips');
+  CALIB.conditions.forEach(cond => {
+    const chip = document.createElement('div');
+    chip.className = 'chip calib-chip';
+    chip.textContent = cond.label;
+    chip.title = `target valence ${cond.v}, arousal ${cond.a}`;
+    chip.addEventListener('click', () => recordCondition(cond, chip));
+    wrap.appendChild(chip);
+  });
+  sec.querySelector('#bCalibFit').addEventListener('click', () => {
+    if (CALIB.done.size < 2) { setCalibMsg('record at least 2 conditions first.'); return; }
+    if (calibSend({ cmd:'calib_finish' })) setCalibMsg('fitted & saved — live output now calibrated.');
+  });
+  sec.querySelector('#bCalibReset').addEventListener('click', () => {
+    calibSend({ cmd:'calib_reset' });
+    CALIB.done.clear();
+    document.querySelectorAll('.calib-chip').forEach(c => { c.style.background=''; c.style.borderColor=''; });
+    setCalibMsg('calibration reset.');
+  });
+})();
