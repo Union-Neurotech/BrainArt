@@ -9,20 +9,32 @@ Control messages (client -> server):
     {"cmd":"calib_reset"}
 Run: python brainart_muse_server.py --board muse_2   |   --sim
 Web app connects to ws://localhost:8765 .
+
+WebSocket payload (server -> client), JSON, ~4 Hz:
+    valence, arousal            : float in [-1,1]
+    delta..gamma                : float in [0,1]  (aggregate, normalized to baseline)
+    eeg     : {"AF7":[...µV], "AF8":[...], "TP9":[...], "TP10":[...]}  last ~1s raw
+    psd     : {"freqs":[Hz...], "AF7":[dB...], ...}  per-channel power spectrum (<=45 Hz)
+    bands_ch: {"AF7":{delta,theta,alpha,beta,gamma}, ...}  per-channel log band power
+    eeg_seq : int  monotonic id so the client only appends each raw chunk once
+    status, calibrated
 """
-import argparse, asyncio, json, os, queue, threading, time, math
+import argparse, asyncio, itertools, json, os, queue, threading, time, math
 import numpy as np
 
 BANDS = [('delta',1,4),('theta',4,8),('alpha',8,13),('beta',13,30),('gamma',30,45)]
 BAND_NAMES = [b[0] for b in BANDS]
 ALPHA, BETA = 2, 3
 FS = 256
+# Channel labels in the SAME order the model sees them, i.e. reorder = [eeg[1],eeg[2],eeg[0],eeg[3]]
+CH_LABELS = ["AF7", "AF8", "TP9", "TP10"]
+SEQ = itertools.count()       # monotonically increasing id so the client can dedupe raw chunks
+VIZ_MAXHZ = 45                # cap PSD output frequency (Hz)
 WINDOW_SEC = 30
 HOP_SEC = 1.0
 BASELINE_SEC = 90
 EMA = 0.6
-_HERE = os.path.dirname(os.path.abspath(__file__))
-CALIB_PATH = os.path.join(_HERE, "models", "muse_va_calib.json")
+CALIB_PATH = "muse_va_calib.json"
 
 def feat_full(x):
     x = x[None]
@@ -56,6 +68,30 @@ def window_features(buf, fs):
     nsec = buf.shape[1] // fs
     de = np.stack([de_bandpowers(buf[:, i*fs:(i+1)*fs], fs) for i in range(nsec)], 1)
     return feat_full(de), de.mean((0,1))
+
+def viz_payload(buf, fs, seq):
+    """Build raw-EEG + PSD + per-channel band powers for the web visualizer.
+    Uses only the most recent ~1s so the client can append a fresh chunk each tick."""
+    if buf is None or buf.shape[1] < 16:
+        return {"eeg_seq": seq}
+    seg = buf[:, -fs:] if buf.shape[1] >= fs else buf
+    n = seg.shape[1]
+    win = np.hanning(n)
+    freqs = np.fft.rfftfreq(n, 1/fs)
+    fsel = freqs <= VIZ_MAXHZ
+    nch = min(len(CH_LABELS), seg.shape[0])
+    eeg, bands_ch = {}, {}
+    psd = {"freqs": np.round(freqs[fsel], 2).tolist()}
+    for c in range(nch):
+        eeg[CH_LABELS[c]] = np.round(seg[c], 2).astype(float).tolist()
+        p = np.abs(np.fft.rfft((seg[c] - seg[c].mean()) * win))**2
+        psd[CH_LABELS[c]] = np.round(10*np.log10(p[fsel] + 1e-12), 2).tolist()
+        bp = {}
+        for (name, lo, hi) in BANDS:
+            sel = (freqs >= lo) & (freqs < hi)
+            bp[name] = round(float(np.log((p[sel].mean() if np.any(sel) else 1e-12) + 1e-12)), 3)
+        bands_ch[CH_LABELS[c]] = bp
+    return {"eeg": eeg, "psd": psd, "bands_ch": bands_ch, "eeg_seq": seq}
 
 class Model:
     def __init__(self, path):
@@ -145,21 +181,31 @@ def acquire_loop(args):
     set_latest(status="baseline")
     print(f"[baseline] relax & sit still for {BASELINE_SEC}s ...")
     time.sleep(WINDOW_SEC + 2)
-    feats=[]; t_end = time.time() + (BASELINE_SEC - WINDOW_SEC)
+    feats=[]; t_end = time.time() + (BASELINE_SEC - WINDOW_SEC); warned=False
     while time.time() < t_end:
         buf = grab(win_n)
         if buf.shape[1] >= win_n:
             f,_ = window_features(buf[:, -win_n:], fs); feats.append(f)
+        elif not warned:
+            print(f"[baseline] waiting for data... {buf.shape[1]}/{win_n} samples"); warned=True
+        set_latest(**viz_payload(buf, fs, next(SEQ)))   # show live channels while baselining
         time.sleep(HOP_SEC)
     feats = np.asarray(feats)
-    base_mu, base_sd = feats.mean(0), feats.std(0).clip(1e-6)
+    if feats.ndim < 2 or feats.shape[0] == 0:
+        print("[baseline] WARNING: collected 0 full windows -- the Muse stream produced "
+              "insufficient data (check the connection / battery). Using a neutral baseline.")
+        nfeat = feat_full(np.zeros((4, 1, len(BANDS)))).shape[0]
+        base_mu, base_sd = np.zeros(nfeat), np.ones(nfeat)
+    else:
+        base_mu, base_sd = feats.mean(0), feats.std(0).clip(1e-6)
     base_band_mu = base_mu[:20].reshape(4,5).mean(0)
     base_band_sd = base_sd[:20].reshape(4,5).mean(0).clip(1e-6)
-    print(f"[baseline] done ({len(feats)} samples). live.")
+    print(f"[baseline] done ({feats.shape[0] if feats.ndim>1 else 0} samples). live.")
     set_latest(status="live", calibrated=model.calib is not None)
     sv = sa = 0.0; anchors = []; recording = None
     while True:
         buf = grab(win_n)
+        viz = viz_payload(buf, fs, next(SEQ))
         if buf.shape[1] >= win_n:
             f, bands = window_features(buf[:, -win_n:], fs)
             raw = model.raw((f-base_mu)/base_sd)
@@ -170,15 +216,26 @@ def acquire_loop(args):
             recording = process_cmds(model, anchors, recording, raw)
             st = recording['status'] if recording else "live"
             set_latest(valence=sv, arousal=sa, status=st,
-                       calibrated=model.calib is not None, **bvals)
+                       calibrated=model.calib is not None, **bvals, **viz)
+        else:
+            set_latest(**viz)
         time.sleep(HOP_SEC)
 
 def run_sim():
     set_latest(status="sim")
     model = type('M', (), {'calib':None,'pred_std':np.array([0.24,0.22])})()
     anchors=[]; recording=None; ph=0.0; sv=sa=0.0
+    tt = np.arange(FS)/FS                       # 1s time base for synthetic raw
     while True:
         ph += 0.02
+        # synthetic 4-channel EEG: per-band sinusoids + noise, in microvolt-like scale
+        sim_buf = np.empty((4, FS))
+        for c in range(4):
+            sig = (20*np.sin(2*np.pi*(2+0.3*c)*tt + ph) +      # delta/theta
+                   14*np.sin(2*np.pi*10*tt + ph*1.3 + c) +      # alpha
+                    6*np.sin(2*np.pi*20*tt + ph*0.7) +          # beta
+                    3*np.sin(2*np.pi*38*tt))                     # gamma
+            sim_buf[c] = sig + 8*np.random.randn(FS)
         raw = np.array([0.6*math.sin(ph*0.7), 0.6*math.sin(ph*0.4+1.0)]) + 0.1*np.random.randn(2)
         if getattr(model,'calib',None) is not None:
             out = np.clip(model.calib['a']*raw+model.calib['b'],-1,1)
@@ -189,7 +246,8 @@ def run_sim():
         recording = sim_process(model, anchors, recording, raw)
         st = recording['status'] if recording else ("sim" if model.calib is None else "live")
         set_latest(valence=float(np.clip(sv,-1,1)), arousal=float(np.clip(sa,-1,1)),
-                   status=st, calibrated=model.calib is not None, **bands)
+                   status=st, calibrated=model.calib is not None, **bands,
+                   **viz_payload(sim_buf, FS, next(SEQ)))
         time.sleep(HOP_SEC)
 
 def sim_process(model, anchors, recording, raw):
@@ -244,7 +302,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--board", default="muse_2", choices=["muse_2","muse_s","muse_2016"])
     ap.add_argument("--serial", default="")
-    ap.add_argument("--model", default=os.path.join(_HERE, "models", "muse_va_live.npz"))
+    ap.add_argument("--model", default="muse_va_live.npz")
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--sim", action="store_true")

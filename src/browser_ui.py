@@ -80,6 +80,7 @@ class BrowserUI:
         """
         BoardShim.enable_dev_board_logger()
         params = BrainFlowInputParams()
+        params.timeout = 30
 
         if port != None: params.serial_port = port
         
