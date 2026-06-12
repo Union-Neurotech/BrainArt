@@ -89,7 +89,9 @@ pred = Xtr @ coef.T + intr
 pred_std = pred.std(0).clip(1e-6)
 print(f"train pred std (val,aro) = {pred_std.round(3)}")
 
-np.savez("muse_va_live.npz",
+MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+os.makedirs(MODELS_DIR, exist_ok=True)
+np.savez(os.path.join(MODELS_DIR, "muse_va_live.npz"),
          coef=coef, intercept=intr, pred_std=pred_std,
          muse_idx=np.array(MUSE_IDX), n_bands=5)
 meta = {"channels":["AF7->FP1","AF8->FP2","TP9->A1","TP10->A2"],
@@ -99,5 +101,5 @@ meta = {"channels":["AF7->FP1","AF8->FP2","TP9->A1","TP10->A2"],
         "labels":"subject_z per-trial valence/arousal",
         "cv_r":{"valence":round(float(rv),3),"arousal":round(float(ra),3)},
         "output":"pred / pred_std -> tanh -> [-1,1]"}
-json.dump(meta, open("muse_va_live.json","w"), indent=2)
-print("saved muse_va_live.npz + muse_va_live.json")
+json.dump(meta, open(os.path.join(MODELS_DIR, "muse_va_live.json"),"w"), indent=2)
+print("saved models/muse_va_live.npz + models/muse_va_live.json")

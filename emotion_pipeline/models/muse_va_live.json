@@ -1,0 +1,30 @@
+{
+  "channels": [
+    "AF7->FP1",
+    "AF8->FP2",
+    "TP9->A1",
+    "TP10->A2"
+  ],
+  "muse_idx": [
+    0,
+    1,
+    30,
+    31
+  ],
+  "bands": [
+    "delta",
+    "theta",
+    "alpha",
+    "beta",
+    "gamma"
+  ],
+  "n_features": 65,
+  "feature_order": "[mean(4x5), std(4x5), slope(4x5), 5 engineered]",
+  "norm": "per-subject z-score of features (live: z-score vs user baseline)",
+  "labels": "subject_z per-trial valence/arousal",
+  "cv_r": {
+    "valence": 0.154,
+    "arousal": 0.12
+  },
+  "output": "pred / pred_std -> tanh -> [-1,1]"
+}
