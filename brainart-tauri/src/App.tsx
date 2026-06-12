@@ -3,7 +3,17 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import BrainArtCanvas from "./components/BrainArtCanvas";
 import RawEEGPlot from "./components/RawEEGPlot";
+import PSDPlot from "./components/PSDPlot";
 import "./App.css";
+
+// Muse electrode order as broadcast by brainart_muse_server.py (matches its reorder)
+export const CHANNEL_LABELS = ["AF7", "AF8", "TP9", "TP10"] as const;
+const RAW_BUFFER = 256 * 5; // 5 s rolling window of raw samples per channel
+
+export interface PsdData {
+  freqs: number[];        // Hz, 0..45
+  chans: number[][];      // dB power, one array per CHANNEL_LABELS entry
+}
 
 // Matches the JSON broadcast by emotion_pipeline/brainart_muse_server.py
 export interface EegState {
@@ -17,7 +27,8 @@ export interface EegState {
   mindfulness: number;
   concentration: number;
   relaxation: number;
-  raw_waves: number[];
+  channels: number[][];   // rolling raw EEG, one array per CHANNEL_LABELS entry (µV)
+  psd: PsdData | null;     // latest power spectrum
 }
 
 const WS_URL = "ws://localhost:8765";
@@ -98,10 +109,12 @@ function SliderRow({
 function App() {
   const eegStateRef = useRef<EegState>({
     valence: 0, arousal: 0, alpha: 0, beta: 0, theta: 0,
-    delta: 0, gamma: 0, mindfulness: 0, concentration: 0, relaxation: 0, raw_waves: [],
+    delta: 0, gamma: 0, mindfulness: 0, concentration: 0, relaxation: 0,
+    channels: CHANNEL_LABELS.map(() => [] as number[]), psd: null,
   });
   const targetRef = useRef<EegState>({ ...eegStateRef.current });
   const wsRef = useRef<WebSocket | null>(null);
+  const lastSeqRef = useRef(-1); // dedupe raw chunks by eeg_seq
 
   const [uiState, setUiState] = useState<EegState>(eegStateRef.current);
   const [selectedBoard, setSelectedBoard] = useState("synthetic");
@@ -140,6 +153,31 @@ function App() {
         }
         if (typeof d.status === "string") setStatus(d.status as string);
         if (typeof d.calibrated === "boolean") setCalibrated(d.calibrated as boolean);
+
+        // raw 4-channel EEG: append each chunk once (deduped by eeg_seq) into a rolling buffer
+        if (d.eeg && typeof d.eeg_seq === "number" && d.eeg_seq !== lastSeqRef.current) {
+          lastSeqRef.current = d.eeg_seq;
+          const eeg = d.eeg as Record<string, number[]>;
+          const buf = eegStateRef.current.channels;
+          CHANNEL_LABELS.forEach((lab, i) => {
+            const chunk = eeg[lab];
+            if (!Array.isArray(chunk)) return;
+            const b = buf[i];
+            for (let j = 0; j < chunk.length; j++) b.push(chunk[j]);
+            if (b.length > RAW_BUFFER) b.splice(0, b.length - RAW_BUFFER);
+          });
+        }
+
+        // power spectral density (per channel, dB)
+        if (d.psd && typeof d.psd === "object") {
+          const p = d.psd as Record<string, number[]>;
+          if (Array.isArray(p.freqs)) {
+            eegStateRef.current.psd = {
+              freqs: p.freqs,
+              chans: CHANNEL_LABELS.map((lab) => (Array.isArray(p[lab]) ? p[lab] : [])),
+            };
+          }
+        }
       };
       ws.onclose = () => { if (mounted && isConnected) setTimeout(connect, 1200); };
       ws.onerror = () => ws.close();
@@ -345,8 +383,13 @@ function App() {
           <span>{showEEG ? "▼" : "▲"}</span>
         </button>
         {showEEG && (
-          <div className="h-40">
-            <RawEEGPlot eegStateRef={eegStateRef} />
+          <div className="flex h-44">
+            <div className="flex-1 min-w-0 border-r border-neutral-800">
+              <RawEEGPlot eegStateRef={eegStateRef} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <PSDPlot eegStateRef={eegStateRef} />
+            </div>
           </div>
         )}
       </div>

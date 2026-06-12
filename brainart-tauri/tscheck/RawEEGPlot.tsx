@@ -1,22 +1,15 @@
 import { useEffect, useRef } from "react";
 import uPlot from "uplot";
-import "uplot/dist/uPlot.min.css";
-import { EegState, CHANNEL_LABELS } from "../App";
+import { EegState, CHANNEL_LABELS } from "./types";
 
 interface Props {
   eegStateRef: React.MutableRefObject<EegState>;
 }
 
-const COLORS = ["#50a0ff", "#27c4a6", "#ffae42", "#ff5d73"]; // AF7, AF8, TP9, TP10
-const SPACING = 1;          // vertical gap between stacked channels (montage units)
-const SAMPLES = 256 * 5;    // 5 s window at 256 Hz
+const COLORS = ["#50a0ff", "#27c4a6", "#ffae42", "#ff5d73"];
+const SPACING = 1;
+const SAMPLES = 256 * 5;
 
-/**
- * Stacked "montage" view of the 4 Muse channels driven by live data in
- * eegStateRef.current.channels (populated from the WebSocket in App.tsx).
- * Each channel is mean-removed and scaled to its own recent amplitude so all
- * four read clearly regardless of absolute µV, then offset onto its own lane.
- */
 export default function RawEEGPlot({ eegStateRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +36,6 @@ export default function RawEEGPlot({ eegStateRef }: Props) {
         {
           stroke: "#777",
           grid: { show: false },
-          // label each lane with its electrode name
           values: (_u, splits) =>
             splits.map((v) => {
               const idx = Math.round(v / SPACING);
@@ -74,7 +66,6 @@ export default function RawEEGPlot({ eegStateRef }: Props) {
         const out = new Array(SAMPLES).fill(lane) as number[];
         const n = Math.min(src.length, SAMPLES);
         if (n > 0) {
-          // mean + robust amplitude (max abs deviation) over the visible window
           const start = src.length - n;
           let mean = 0;
           for (let k = 0; k < n; k++) mean += src[start + k];
@@ -85,7 +76,7 @@ export default function RawEEGPlot({ eegStateRef }: Props) {
             if (dvt > maxAbs) maxAbs = dvt;
           }
           const scale = (SPACING * 0.42) / maxAbs;
-          const off = SAMPLES - n; // right-align newest sample
+          const off = SAMPLES - n;
           for (let k = 0; k < n; k++) out[off + k] = lane + (src[start + k] - mean) * scale;
         }
         data.push(out);
