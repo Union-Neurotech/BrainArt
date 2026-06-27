@@ -1,0 +1,7 @@
+# Lean dependency set for the Electron app's Python backend (src/server.py).
+# The legacy requirements.txt pins Streamlit-era versions for the old UI and
+# does not install cleanly on newer Python. The WebSocket backend only needs:
+brainflow>=5.12
+numpy
+pandas
+websockets>=12
