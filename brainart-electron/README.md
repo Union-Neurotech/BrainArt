@@ -51,6 +51,12 @@ with no hardware. Save/Print write to `../generated/images/`.
 > without that, Electron would run as plain Node and `electron.app` would be
 > undefined.
 
+> **Viewport flicker fix:** the WebGL loop ends each frame with a 1px
+> `gl.readPixels` (see `src/renderer/src/gl/renderer.js`). This forces the GPU to
+> resolve the frame before Chromium's compositor presents it, eliminating a
+> present-race that made the viewport flicker. `gl.finish()` alone was not enough
+> on this driver — keep the `readPixels` line.
+
 ## Protocol (JSON over WebSocket)
 
 - renderer → backend: `list_boards`, `connect`, `disconnect`, `start`, `stop`,

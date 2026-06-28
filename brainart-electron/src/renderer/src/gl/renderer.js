@@ -15,23 +15,6 @@ const BACKING_H = 900            // 16:9
 // Only newSeed() changes it.
 let persistedSeed = Math.random() * 20
 
-// TEMP DIAGNOSTIC — counts how many distinct render loops actually draw per second.
-if (typeof window !== 'undefined') {
-  window.__ba = window.__ba || { created: 0, destroyed: 0, drew: new Set() }
-  if (!window.__baTimer) {
-    window.__baTimer = setInterval(() => {
-      console.log(
-        `[ba-diag] drawing: ${window.__ba.drew.size} | live: ${window.__ba.created - window.__ba.destroyed}` +
-        ` | frames/s: ${window.__ba.frames || 0} | maxColorJump: ${window.__ba.maxDelta || 0} (0-765)`
-      )
-      window.__ba.drew = new Set()
-      window.__ba.frames = 0
-      window.__ba.maxDelta = 0
-    }, 1000)
-    window.addEventListener('error', (e) => console.log(`[ba-err] ${e.message} @ ${e.filename}:${e.lineno}`))
-  }
-}
-
 export function createRenderer(canvas, stateRef) {
   // Guarantee exactly one renderer / RAF loop per canvas. A second init that
   // left the previous loop running (each with its own seed) is what makes the
@@ -117,8 +100,8 @@ export function createRenderer(canvas, stateRef) {
   let tOffset = 0
   let seed = persistedSeed
   let raf = 0
-  const myId = (window.__ba.created += 1) // TEMP DIAGNOSTIC
   const mouse = { x: 0, y: 0, str: 0, down: false }
+  const syncPixel = new Uint8Array(4) // reused readback target (see drawFrame)
 
   // Draw a single frame at the given elapsed time. No RAF scheduling here, so it
   // can also be called synchronously by screenshot() (needed now that
@@ -148,6 +131,14 @@ export function createRenderer(canvas, stateRef) {
     gl.uniform1f(UL.u_arousal, E.arousal)
     gl.uniform1f(UL.u_layers, E.layers)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+    // Force the GPU to finish AND resolve this frame before the RAF callback yields
+    // and the compositor presents the canvas. Otherwise Electron/Chromium presents
+    // the texture before the draw completes — a present race that shows as the
+    // viewport flickering between partial/garbled frames. On this GPU/driver,
+    // gl.finish() alone does NOT prevent it; a 1px readPixels (which forces a real
+    // buffer resolve/readback) is what reliably does. Keep this line.
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, syncPixel)
   }
 
   function elapsedNow(ts) {
@@ -155,18 +146,7 @@ export function createRenderer(canvas, stateRef) {
   }
 
   function render(ts) {
-    window.__ba.drew.add(myId) // TEMP DIAGNOSTIC
     drawFrame(elapsedNow(ts))
-    // TEMP DIAGNOSTIC: measure frame-to-frame color jump at the center pixel.
-    window.__ba.frames = (window.__ba.frames || 0) + 1
-    const px = window.__ba._px || (window.__ba._px = new Uint8Array(4))
-    gl.readPixels(BACKING_W >> 1, BACKING_H >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
-    const last = window.__ba._lastPx
-    if (last) {
-      const d = Math.abs(px[0] - last[0]) + Math.abs(px[1] - last[1]) + Math.abs(px[2] - last[2])
-      if (d > (window.__ba.maxDelta || 0)) window.__ba.maxDelta = d
-    }
-    window.__ba._lastPx = Uint8Array.from(px)
     raf = requestAnimationFrame(render)
   }
   raf = requestAnimationFrame(render)
@@ -212,7 +192,6 @@ export function createRenderer(canvas, stateRef) {
       cancelAnimationFrame(raf)
       raf = 0
       ac.abort()
-      window.__ba.destroyed += 1 // TEMP DIAGNOSTIC
       if (canvas.__brainartRenderer === api) canvas.__brainartRenderer = null
     }
   }
