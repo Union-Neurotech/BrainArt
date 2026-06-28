@@ -17,6 +17,54 @@ from brainflow.ml_model import BrainFlowClassifiers, BrainFlowMetrics, BrainFlow
 import numpy as np
 import pandas as pd
 import os
+import threading
+
+
+class _MLModelCache:
+    """Prepare BrainFlow MLModels once and reuse them for inference.
+
+    Preparing a model loads its classifier / ONNX file -- the expensive step --
+    while predict() is cheap, stateless, and repeatable. Models are keyed by
+    their identifying params so each distinct model is prepared at most once and
+    then reused for every subsequent prediction. A lock serializes access
+    because a cached model is shared across worker threads (the live metrics
+    loop and the stop-time aggregate can overlap).
+    """
+
+    def __init__(self):
+        self._models = {}
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _key(params):
+        return (
+            int(params.metric),
+            int(params.classifier),
+            params.file or "",
+            params.output_name or "",
+        )
+
+    def predict(self, params, feature_vector):
+        key = self._key(params)
+        with self._lock:
+            model = self._models.get(key)
+            if model is None:
+                model = MLModel(params)
+                model.prepare()
+                self._models[key] = model
+            return model.predict(feature_vector)
+
+    def release_all(self):
+        with self._lock:
+            for model in self._models.values():
+                try:
+                    model.release()
+                except Exception:
+                    pass
+            self._models.clear()
+
+
+_ml_cache = _MLModelCache()
 
 
 # Current Functioning Methods:
@@ -150,23 +198,14 @@ def get_simple_feature_vector(data:pd.DataFrame, boardID:int):
     # Needed for error avoidance
     data = np.ascontiguousarray(data)
 
-    data = data[:len(eeg_channels)] # Shorten to just our eeg channels
-
-    print(f"Shape is: {data.shape}")
+    data = data[:len(eeg_channels)]  # Shorten to just our eeg channels
     eeg_indicies = list(range(0, len(eeg_channels)))
 
-    print(f"EEG indices: {eeg_indicies}")
-
-
     bands_global = DataFilter.get_avg_band_powers(data, eeg_indicies, sampling_rate, apply_filter=True)
-
     bands_global = bands_global[0]
-    print(f"Average bands: {bands_global}")
-    print(f"Average Bands type: {type(bands_global)}")
 
-    # Reorder bands since initial order is delta, theta, alpha, beta, gamma
-
-    # We want alpha, beta, delta, theta, gamma --> see below
+    # Reorder bands from BrainFlow's (delta, theta, alpha, beta, gamma) order
+    # into our (alpha, beta, delta, theta, gamma) convention.
     bands_global = np.array([bands_global[2], bands_global[3], bands_global[0], bands_global[1], bands_global[4]])
 
     # Get ML_Predictions
@@ -174,32 +213,10 @@ def get_simple_feature_vector(data:pd.DataFrame, boardID:int):
     mindfulness = get_mindfulness_value(data=data, boardID=boardID, sampling_rate=sampling_rate)
     relaxation = get_relaxation_value(data=data, boardID=boardID, sampling_rate=sampling_rate)
 
-    # Concatenate all features
-
-    # Normalize bands global
-    # bands_global = bands_global/np.linalg.norm(bands_global)
-
+    # Normalize the band powers so they sum to 1.
     bands_global = bands_global / np.sum(bands_global)
-    
-    print(f"Bands Global: {bands_global}")
-    
-    feature_dict = {
-        "bands_global": bands_global,
-        "alpha": bands_global[0],
-        "beta": bands_global[1],
-        "delta": bands_global[2],
-        "theta": bands_global[3],
-        "gamma": bands_global[4],
-        "concentration": concentration[0],
-        "mindfulness": mindfulness[0],
-        "relaxation": relaxation[0]
-    }
-
-    print(f"feature_dict: {feature_dict}")
 
     simple_feature_vector = np.array((bands_global[0], bands_global[1], bands_global[2], bands_global[3], bands_global[4], concentration[0], mindfulness[0], relaxation[0]))
-    print(f"Simple feature vector: {simple_feature_vector}")
-    # simple_feature_vector = np.concatenate((bands_global, [concentration, mindfulness, relaxation]))
 
     return simple_feature_vector
 
@@ -237,30 +254,17 @@ def get_ML_prediction_value(data, boardID, ML_Model, Classifier, sampling_rate, 
         model_params.file = model_filepath
         model_params.output_name = "probabilities"
 
-    ml_prediction = MLModel(model_params)
-    ml_prediction.prepare()
-
-    # chunk_sample_size = chunk_size * sampling_rate
-    
-    # Get the average prediction value across all chunks
-    ml_prediction_average = []
-
     # Get the eeg indicies
     eeg_channels = BoardShim.get_eeg_channels(boardID)
     eeg_indicies = list(range(0, len(eeg_channels)))
 
-
     feature_vector = DataFilter.get_avg_band_powers(data, eeg_indicies, sampling_rate, apply_filter=True)
-    feature_vector = feature_vector[0] # Get only the first part; the second part is standard deviation which we don't care about right now
-    prediction = ml_prediction.predict(feature_vector)
+    feature_vector = feature_vector[0]  # first row is the bandpowers; second is std-dev
 
-    print(f"Prediction: {prediction}")
-    ml_prediction_average.append(prediction)
-    
-    ml_prediction.release()
-    
-    # Return the average prediction value across all chunks
-    return prediction
+    # Reuse a prepared model from the cache instead of preparing/releasing the
+    # classifier on every call -- preparing (loading the ONNX/metric model) is
+    # the expensive step, while predict() is cheap and repeatable.
+    return _ml_cache.predict(model_params, feature_vector)
 
 def get_concentration_value(data:pd.DataFrame, boardID:int, sampling_rate:int, chunk_size=5):
     """

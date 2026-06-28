@@ -195,7 +195,7 @@ export default function StatusBar(props: Props) {
           />
           <Slider
             label="Valence"
-            hint="warm ↔ cool"
+            hint="warm <<<>>> cool"
             min={-1}
             max={1}
             step={0.01}

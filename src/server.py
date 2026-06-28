@@ -44,6 +44,15 @@ PREVIEW_HZ = 15            # how often live wave snapshots are pushed
 PREVIEW_SAMPLES = 256      # samples per channel in each snapshot
 PREVIEW_MAX_CHANNELS = 8   # cap traces in the debug preview
 
+# Live rolling metrics pushed during streaming (non-destructive peek + EMA).
+METRICS_HZ = 10            # target cadence; the loop is sequential, so it never
+                           # overlaps computations and self-throttles to the
+                           # actual ML compute time (slower hardware just emits
+                           # less often, down toward ~1 Hz).
+METRICS_WINDOW_SEC = 4.0   # recent-data window the rolling metrics summarize;
+                           # also acts as the warm-up gate (no emit until full).
+METRICS_EMA_ALPHA = 0.3    # EMA smoothing factor (higher = snappier, noisier).
+
 # Keys returned by get_simple_feature_vector, in order. These mirror the
 # renderer's visual-state fields exactly so a `state` patch drives the shader.
 METRIC_KEYS = [
@@ -66,7 +75,10 @@ class Backend:
         self.board_name = None
         self.streaming = False
         self.preview_task = None
+        self.metrics_task = None
         self.eeg_channels = []
+        self._metrics_ema = None        # smoothed live-metric state
+        self._metrics_err_logged = False  # rate-limit live-metric error logs
 
     # ---- outbound messaging -------------------------------------------------
     async def broadcast(self, msg):
@@ -173,7 +185,11 @@ class Backend:
             self.streaming = True
             await self.log("Streaming started.")
             await self.send_status()
+            # Fresh smoothing state for each streaming session.
+            self._metrics_ema = None
+            self._metrics_err_logged = False
             self.preview_task = asyncio.create_task(self.preview_loop())
+            self.metrics_task = asyncio.create_task(self.metrics_loop())
         except Exception as e:
             await self.log(f"Start error: {e}", "error")
 
@@ -197,6 +213,60 @@ class Backend:
         except asyncio.CancelledError:
             pass
 
+    async def metrics_loop(self):
+        """Push smoothed rolling metrics while streaming.
+
+        Peeks the most recent METRICS_WINDOW_SEC of data *non-destructively*
+        (get_current_board_data), so the full start->stop buffer that stop()
+        averages stays untouched. Computes the feature vector in a worker
+        thread, applies an EMA, and broadcasts a `state` patch -- the same
+        message the renderer already applies to drive the shader + indicators.
+
+        The loop awaits each compute, so it never overlaps or piles up: it
+        targets METRICS_HZ but degrades gracefully to whatever the ML compute
+        can sustain on the current hardware.
+        """
+        period = 1.0 / METRICS_HZ
+        sampling_rate = BoardShim.get_sampling_rate(self.board_id)
+        window = int(METRICS_WINDOW_SEC * sampling_rate)
+        try:
+            while self.streaming:
+                t0 = time.monotonic()
+                try:
+                    data = await asyncio.to_thread(
+                        self.comms.board.get_current_board_data, window
+                    )
+                    # Warm-up gate: emit only once a full window has buffered.
+                    if data is not None and data.shape[1] >= window:
+                        patch = await asyncio.to_thread(self.compute_metrics, data)
+                        patch = self._smooth_metrics(patch)
+                        await self.broadcast({"type": "state", "patch": patch})
+                        self._metrics_err_logged = False
+                except Exception as e:
+                    # Avoid spamming the console at the loop rate: log once,
+                    # then stay quiet until the next successful computation.
+                    if not self._metrics_err_logged:
+                        await self.log(f"Live metrics error: {e}", "error")
+                        self._metrics_err_logged = True
+                # Self-throttle: sleep only the remainder of the target period.
+                elapsed = time.monotonic() - t0
+                if self.streaming and elapsed < period:
+                    await asyncio.sleep(period - elapsed)
+        except asyncio.CancelledError:
+            pass
+
+    def _smooth_metrics(self, patch):
+        """Exponential moving average across successive live patches."""
+        ema = self._metrics_ema
+        if ema is None:
+            ema = dict(patch)
+        else:
+            a = METRICS_EMA_ALPHA
+            for k, v in patch.items():
+                ema[k] = a * v + (1 - a) * ema.get(k, v)
+        self._metrics_ema = ema
+        return {k: float(v) for k, v in ema.items()}
+
     async def stop(self):
         if not self.streaming:
             await self.log("Not streaming.", "error")
@@ -205,6 +275,9 @@ class Backend:
         if self.preview_task:
             self.preview_task.cancel()
             self.preview_task = None
+        if self.metrics_task:
+            self.metrics_task.cancel()
+            self.metrics_task = None
         try:
             data = await asyncio.to_thread(self.comms.board.get_board_data)
             await asyncio.to_thread(self.comms.stop_stream)
