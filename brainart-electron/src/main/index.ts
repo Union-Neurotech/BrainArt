@@ -50,9 +50,14 @@ function createWindow(): void {
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '..', 'preload', 'index.js'),
-      sandbox: false
+      sandbox: false,
+      backgroundThrottling: false // TEMP: keep RAF running while backgrounded for measurement
     }
   })
+
+  win.webContents.on('console-message', (_e, _level, message) => {
+    if (message.includes('[ba-diag]') || message.includes('[ba-err]')) console.log(`[renderer] ${message}`)
+  }) // TEMP instrumentation
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)

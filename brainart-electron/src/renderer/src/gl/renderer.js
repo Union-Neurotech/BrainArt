@@ -10,10 +10,42 @@ const NEUTRAL_MODE = true        // false => legacy hueRot/warm-cool look
 const BACKING_W = 1600
 const BACKING_H = 900            // 16:9
 
+// Seed persists across re-inits (HMR, an extra effect run, remounts) so the
+// artwork stays stable and any transient double-init renders the *same* image.
+// Only newSeed() changes it.
+let persistedSeed = Math.random() * 20
+
+// TEMP DIAGNOSTIC — counts how many distinct render loops actually draw per second.
+if (typeof window !== 'undefined') {
+  window.__ba = window.__ba || { created: 0, destroyed: 0, drew: new Set() }
+  if (!window.__baTimer) {
+    window.__baTimer = setInterval(() => {
+      console.log(
+        `[ba-diag] drawing: ${window.__ba.drew.size} | live: ${window.__ba.created - window.__ba.destroyed}` +
+        ` | frames/s: ${window.__ba.frames || 0} | maxColorJump: ${window.__ba.maxDelta || 0} (0-765)`
+      )
+      window.__ba.drew = new Set()
+      window.__ba.frames = 0
+      window.__ba.maxDelta = 0
+    }, 1000)
+    window.addEventListener('error', (e) => console.log(`[ba-err] ${e.message} @ ${e.filename}:${e.lineno}`))
+  }
+}
+
 export function createRenderer(canvas, stateRef) {
+  // Guarantee exactly one renderer / RAF loop per canvas. A second init that
+  // left the previous loop running (each with its own seed) is what makes the
+  // canvas strobe between two entirely different images. Tear down any prior
+  // renderer bound to this canvas before starting a new one.
+  canvas.__brainartRenderer?.destroy()
+
+  // preserveDrawingBuffer is intentionally OFF: with it on, Chromium/Electron uses
+  // a blit-present path that races the compositor and flickers. We redraw the whole
+  // frame every tick anyway, so the default (flip) path is stable; screenshots draw
+  // one fresh frame synchronously right before toDataURL (see screenshot()).
   const gl =
-    canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false }) ||
-    canvas.getContext('experimental-webgl', { preserveDrawingBuffer: true })
+    canvas.getContext('webgl', { antialias: false }) ||
+    canvas.getContext('experimental-webgl')
   if (!gl) throw new Error('WebGL not supported')
 
   function compileShader(type, src) {
@@ -83,12 +115,15 @@ export function createRenderer(canvas, stateRef) {
   let animOn = true
   let t0 = performance.now()
   let tOffset = 0
-  let seed = 5
+  let seed = persistedSeed
   let raf = 0
+  const myId = (window.__ba.created += 1) // TEMP DIAGNOSTIC
   const mouse = { x: 0, y: 0, str: 0, down: false }
 
-  function render(ts) {
-    const elapsed = animOn ? (ts - t0) / 1000 : tOffset
+  // Draw a single frame at the given elapsed time. No RAF scheduling here, so it
+  // can also be called synchronously by screenshot() (needed now that
+  // preserveDrawingBuffer is off — the buffer is only valid right after a draw).
+  function drawFrame(elapsed) {
     if (!mouse.down) mouse.str = Math.max(0, mouse.str - 0.025)
 
     const E = stateRef.current
@@ -113,6 +148,25 @@ export function createRenderer(canvas, stateRef) {
     gl.uniform1f(UL.u_arousal, E.arousal)
     gl.uniform1f(UL.u_layers, E.layers)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+  }
+
+  function elapsedNow(ts) {
+    return animOn ? (ts - t0) / 1000 : tOffset
+  }
+
+  function render(ts) {
+    window.__ba.drew.add(myId) // TEMP DIAGNOSTIC
+    drawFrame(elapsedNow(ts))
+    // TEMP DIAGNOSTIC: measure frame-to-frame color jump at the center pixel.
+    window.__ba.frames = (window.__ba.frames || 0) + 1
+    const px = window.__ba._px || (window.__ba._px = new Uint8Array(4))
+    gl.readPixels(BACKING_W >> 1, BACKING_H >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    const last = window.__ba._lastPx
+    if (last) {
+      const d = Math.abs(px[0] - last[0]) + Math.abs(px[1] - last[1]) + Math.abs(px[2] - last[2])
+      if (d > (window.__ba.maxDelta || 0)) window.__ba.maxDelta = d
+    }
+    window.__ba._lastPx = Uint8Array.from(px)
     raf = requestAnimationFrame(render)
   }
   raf = requestAnimationFrame(render)
@@ -136,15 +190,18 @@ export function createRenderer(canvas, stateRef) {
   canvas.addEventListener('mouseleave', () => { mouse.down = false }, sig)
 
   function newSeed() {
-    seed = Math.random() * 20
+    persistedSeed = Math.random() * 20
+    seed = persistedSeed
     t0 = performance.now()
     tOffset = 0
     return seed
   }
-  newSeed()
 
-  return {
-    screenshot: () => canvas.toDataURL('image/png'),
+  const api = {
+    screenshot: () => {
+      drawFrame(elapsedNow(performance.now())) // fresh frame, then read it immediately
+      return canvas.toDataURL('image/png')
+    },
     newSeed,
     setAnim(on) {
       animOn = on
@@ -153,7 +210,17 @@ export function createRenderer(canvas, stateRef) {
     },
     destroy() {
       cancelAnimationFrame(raf)
+      raf = 0
       ac.abort()
+      window.__ba.destroyed += 1 // TEMP DIAGNOSTIC
+      if (canvas.__brainartRenderer === api) canvas.__brainartRenderer = null
     }
   }
+
+  canvas.__brainartRenderer = api
+
+  // When Vite hot-swaps this module, cancel this loop so loops never stack.
+  if (import.meta.hot) import.meta.hot.dispose(() => api.destroy())
+
+  return api
 }
