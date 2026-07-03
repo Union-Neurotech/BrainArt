@@ -34,7 +34,11 @@ WINDOW_SEC = 30
 HOP_SEC = 1.0
 BASELINE_SEC = 90
 EMA = 0.6
-CALIB_PATH = "muse_va_calib.json"
+HERE = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(HERE, "models")
+DEFAULT_MODEL = os.path.join(MODELS_DIR, "muse_va_live.npz")
+# calibration saved next to the model so it persists regardless of launch directory
+CALIB_PATH = os.path.join(MODELS_DIR, "muse_va_calib.json")
 
 def feat_full(x):
     x = x[None]
@@ -302,7 +306,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--board", default="muse_2", choices=["muse_2","muse_s","muse_2016"])
     ap.add_argument("--serial", default="")
-    ap.add_argument("--model", default="muse_va_live.npz")
+    ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--sim", action="store_true")

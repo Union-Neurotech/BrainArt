@@ -36,7 +36,9 @@ export default function RawEEGPlot({ eegStateRef }: Props) {
       title: "Raw EEG · 4 ch · 5 s",
       scales: {
         x: { time: false },
-        y: { auto: false, range: [-SPACING, nCh * SPACING] },
+        // extra margin below the lowest lane (AF7) and above the highest (TP10)
+        // so the traces don't clip at the panel edges
+        y: { auto: false, range: [-1.8 * SPACING, (nCh - 0.3) * SPACING] },
       },
       axes: [
         { show: false, grid: { show: false } },
