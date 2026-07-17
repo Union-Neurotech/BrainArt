@@ -2,11 +2,11 @@ from brainflow import BoardIds
 import os
 board_id_pairs ={
     "Synthetic"                        : {"id":BoardIds.SYNTHETIC_BOARD.value  , "using_port": False},
-    "Muse2"                            : {"id":BoardIds.MUSE_2_BLED_BOARD.value, "using_port": True },
-    "Muse2016"                         : {"id":BoardIds.MUSE_2016_BLED_BOARD   , "using_port": True },
+    "Muse2"                            : {"id":BoardIds.MUSE_2_BOARD.value, "using_port": False },
+    # "Muse2016"                         : {"id":BoardIds.MUSE_2016_BLED_BOARD   , "using_port": True },
     "OpenBCI Cyton (8-channels)"       : {"id":BoardIds.CYTON_BOARD.value      , "using_port": True },
-    "OpenBCI Cyton-Daisy (16-channels)": {"id":BoardIds.CYTON_DAISY_BOARD.value, "using_port": True },
-    "OpenBCI Ganglion"                 : {"id":BoardIds.GANGLION_BOARD.value   , "using_port": True }
+    # "OpenBCI Cyton-Daisy (16-channels)": {"id":BoardIds.CYTON_DAISY_BOARD.value, "using_port": True },
+    # "OpenBCI Ganglion"                 : {"id":BoardIds.GANGLION_BOARD.value   , "using_port": True }
 }
 
 def get_user_data():
