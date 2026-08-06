@@ -126,6 +126,24 @@ html, body, #root {
 .slider-row { margin-bottom: 6px; }
 .slider-row ion-range { padding: 2px 0; --bar-height: 2px; }
 
+/* Inline select inside a metrics section (e.g. the focus-driver picker). */
+.sb-sub {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.05);
+}
+.sb-sub ion-select {
+  --padding-start: 0;
+  --padding-end: 0;
+  font-size: 12px;
+  min-height: 0;
+  text-align: right;
+}
+
 .btn-pair { display: flex; gap: 6px; }
 .btn-pair ion-button { flex: 1; }
 

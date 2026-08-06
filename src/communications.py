@@ -52,8 +52,13 @@ class Comms:
     
     def disconnect(self):
         if self.is_connected:
-            self.board.release_session()
-            self.is_connected = False
+            # Clear the flag even if release_session() raises. Otherwise a failed
+            # release leaves this object permanently claiming to be connected,
+            # and nothing can recover without restarting the backend.
+            try:
+                self.board.release_session()
+            finally:
+                self.is_connected = False
 
     def start_stream(self):
         self.board.start_stream()

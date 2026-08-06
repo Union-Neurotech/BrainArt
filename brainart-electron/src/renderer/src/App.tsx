@@ -3,7 +3,7 @@ import { IonApp } from '@ionic/react'
 import Viewport, { ViewportHandle } from './components/Viewport'
 import StatusBar from './components/StatusBar'
 import DebugConsole, { LogLine } from './components/DebugConsole'
-import { BrainState, DEFAULT_STATE } from './state'
+import { BrainState, DEFAULT_STATE, FocusDriver, NumericStateKey } from './state'
 import { Board, StatusMsg, useBackend } from './ws'
 
 const MAX_LOGS = 300
@@ -59,10 +59,17 @@ export default function App() {
     onWaves: (channels) => {
       wavesRef.current = channels
     },
-    onState: applyPatch
+    onState: applyPatch,
+    onOffline: () => {
+      // The backend owns this state; with the socket down we can't know it, and
+      // stale values would leave the controls lying about the device.
+      setConnected(false)
+      setStreaming(false)
+      setDevice(null)
+    }
   })
 
-  const setSlider = useCallback((key: keyof BrainState, value: number) => {
+  const setSlider = useCallback((key: NumericStateKey, value: number) => {
     setUi((prev) => {
       const next = { ...prev, [key]: value }
       stateRef.current = next
@@ -70,13 +77,29 @@ export default function App() {
     })
   }, [])
 
+  // Separate from setSlider: this one carries a string, not a number.
+  const setFocusDriver = useCallback((d: FocusDriver) => {
+    setUi((prev) => {
+      const next = { ...prev, focusDriver: d }
+      stateRef.current = next
+      return next
+    })
+  }, [])
+
   const usingPort = boards.find((b) => b.name === selectedBoard)?.using_port ?? false
 
+  // Every command reports a dropped send. A click that goes nowhere is otherwise
+  // indistinguishable from one that worked, since the UI only updates on the
+  // `status` message the backend sends back.
+  const cmd = (msg: Record<string, unknown>) => {
+    if (!send(msg)) addLog('error', 'Backend offline — command not sent.')
+  }
+
   const onConnect = () =>
-    send({ type: 'connect', board: selectedBoard, port: usingPort ? port || null : null })
-  const onDisconnect = () => send({ type: 'disconnect' })
-  const onStart = () => send({ type: 'start' })
-  const onStop = () => send({ type: 'stop' })
+    cmd({ type: 'connect', board: selectedBoard, port: usingPort ? port || null : null })
+  const onDisconnect = () => cmd({ type: 'disconnect' })
+  const onStart = () => cmd({ type: 'start' })
+  const onStop = () => cmd({ type: 'stop' })
 
   // Capture the canvas and hand it to the backend, which writes the file and
   // logs the path back. Both failure modes report themselves -- silence here is
@@ -116,6 +139,7 @@ export default function App() {
             onStop={onStop}
             ui={ui}
             onSlider={setSlider}
+            onFocusDriver={setFocusDriver}
             onSave={onSave}
             onPrint={onPrint}
           />

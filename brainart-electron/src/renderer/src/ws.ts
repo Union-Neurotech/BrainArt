@@ -18,6 +18,8 @@ export interface BackendHandlers {
   onStatus?: (status: StatusMsg) => void
   onWaves?: (channels: number[][]) => void
   onState?: (patch: Record<string, number>) => void
+  /** Socket dropped: any device state the UI is holding is now stale. */
+  onOffline?: () => void
 }
 
 const WS_PORT = (window as any).brainart?.wsPort ?? 17321
@@ -47,6 +49,11 @@ export function useBackend(handlers: BackendHandlers): {
       ws.onopen = () => setOnline(true)
       ws.onclose = (ev) => {
         setOnline(false)
+        // `connected`/`streaming`/`device` only ever arrive in a `status`
+        // message, so without this the UI keeps claiming a live device after the
+        // backend is gone -- leaving a red Disconnect button that can never
+        // revert, because only an inbound status could flip it back.
+        handlersRef.current.onOffline?.()
         // Surface abnormal closes. The reconnect below otherwise hides them
         // completely: a frame the backend refuses (close 1009, "message too
         // big") looks identical to nothing having happened at all.

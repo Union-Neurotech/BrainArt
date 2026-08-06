@@ -137,8 +137,11 @@ class NumpyArtGenerator:
         Used EEG ML metrics to modify output image
         """
         concentration = feature_vector[5]
-        mindfulness = feature_vector[6]
-        restfulness = feature_vector[7]
+        restfulness = feature_vector[6]
+        # The feature vector no longer carries a separate mindfulness element:
+        # concentration is itself BrainFlow's MINDFULNESS metric, so the two were
+        # identical. Alias it here to keep the logic below unchanged.
+        mindfulness = concentration
 
         # Initialize modifiers
         width_modifier = 0

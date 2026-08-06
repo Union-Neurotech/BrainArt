@@ -75,8 +75,15 @@ export function createRenderer(canvas, stateRef) {
   function emotionToVisuals() {
     const E = stateRef.current
     const v = E.valence, a = E.arousal, absV = Math.abs(v)
-    const damp = 1 - E.mindfulness * 0.6
-    const sharp = E.concentration * 0.5
+    // The "focus" signal sharpens structure and calms motion. Which metric plays
+    // that role is selectable (E.focusDriver) because BrainFlow's RESTFULNESS is
+    // the exact complement of its MINDFULNESS -- relaxation === 1 - concentration
+    // -- so the choice flips which end of that single axis reads as "focused".
+    const focus = E.focusDriver === 'relaxation' ? E.relaxation : E.concentration
+    // Ceiling is 0.85 rather than 1.0 so that even at zero focus the motion stays
+    // watchable instead of frantic -- raise toward 1.0 for a livelier idle.
+    const damp = 0.85 - focus * 0.45
+    const sharp = focus * 0.5
     const soft = E.relaxation * 0.4
     const shift_damper = 0.5
     const ap = (a + 1) * 0.5
@@ -86,9 +93,11 @@ export function createRenderer(canvas, stateRef) {
       sat: 1.0 + absV * 1.2 + E.gamma * 1.5,
       zoom: 0.7 + (1 - ap) * 0.6 + (1 - E.beta) * 0.4 + soft,
       complexity: 0.15 + ap * 1.1 + E.beta * 0.3 + sharp,
-      chaos: E.theta * 1.8 * damp,
+      // chaos/speed coefficients trimmed (were 1.8 and 0.02/0.12/0.06) so the
+      // low-concentration end reads as calm rather than frantic.
+      chaos: E.theta * 1.25 * damp,
       radial: E.alpha * 0.85,
-      speed: (0.02 + E.delta * 0.12 + Math.max(a, 0) * 0.06) * damp,
+      speed: (0.015 + E.delta * 0.08 + Math.max(a, 0) * 0.05) * damp,
       warp: 0.3 + E.gamma * 0.6 + ap * 0.4,
       offset_x: 0,
       offset_y: 0

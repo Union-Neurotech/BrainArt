@@ -101,7 +101,8 @@ METRICS_EMA_ALPHA = 0.3    # EMA smoothing factor (higher = snappier, noisier).
 # renderer's visual-state fields exactly so a `state` patch drives the shader.
 METRIC_KEYS = [
     "alpha", "beta", "delta", "theta", "gamma",
-    "concentration", "mindfulness", "relaxation",
+    "concentration",   # BrainFlow MINDFULNESS metric
+    "relaxation",      # BrainFlow RESTFULNESS metric
 ]
 
 
@@ -202,19 +203,31 @@ class Backend:
             await self.log(f"Connection error: {e}", "error")
 
     async def disconnect(self):
+        if self.comms is None:
+            await self.log("Not connected.", "error")
+            return
         if self.streaming:
             await self.stop()
-        if self.comms is not None:
-            try:
-                await asyncio.to_thread(self.comms.disconnect)
-            except Exception as e:
-                await self.log(f"Disconnect error: {e}", "error")
         name = self.board_name
+        released = True
+        try:
+            await asyncio.to_thread(self.comms.disconnect)
+        except Exception as e:
+            released = False
+            await self.log(f"Disconnect error while releasing the session: {e}", "error")
+        # Drop the handle either way: a board we failed to release is not a board
+        # we can keep using, and holding it would wedge the UI in "connected".
         self.comms = None
         self.board_id = None
         self.board_name = None
         self.eeg_channels = []
-        await self.log(f"Disconnected from {name}." if name else "Disconnected.")
+        if released:
+            await self.log(f"Disconnected from {name}." if name else "Disconnected.")
+        else:
+            await self.log(
+                f"Released handle on {name} despite the error above; "
+                f"reconnecting may require restarting the device.", "error"
+            )
         await self.send_status()
 
     # ---- streaming ----------------------------------------------------------
@@ -319,12 +332,20 @@ class Backend:
             await self.log("Not streaming.", "error")
             return
         self.streaming = False
-        if self.preview_task:
-            self.preview_task.cancel()
-            self.preview_task = None
-        if self.metrics_task:
-            self.metrics_task.cancel()
-            self.metrics_task = None
+        # Cancel *and await* the loops before touching the board. Cancelling an
+        # `asyncio.to_thread` await does not interrupt the worker thread, so an
+        # un-awaited task can still be inside get_current_board_data() when
+        # disconnect() calls release_session() -- which tears the ring buffer out
+        # from under a live native read and hangs or crashes the interpreter.
+        # That race is why Disconnect could kill the backend before it ever
+        # logged anything.
+        tasks = [t for t in (self.preview_task, self.metrics_task) if t]
+        self.preview_task = None
+        self.metrics_task = None
+        for t in tasks:
+            t.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         try:
             data = await asyncio.to_thread(self.comms.board.get_board_data)
             await asyncio.to_thread(self.comms.stop_stream)

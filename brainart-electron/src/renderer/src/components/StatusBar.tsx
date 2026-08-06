@@ -7,7 +7,7 @@ import {
   IonSelectOption
 } from '@ionic/react'
 import type { Board } from '../ws'
-import type { BrainState } from '../state'
+import type { BrainState, FocusDriver, NumericStateKey } from '../state'
 
 interface Props {
   boards: Board[]
@@ -24,7 +24,8 @@ interface Props {
   onStart: () => void
   onStop: () => void
   ui: BrainState
-  onSlider: (key: keyof BrainState, value: number) => void
+  onSlider: (key: NumericStateKey, value: number) => void
+  onFocusDriver: (d: FocusDriver) => void
   onSave: () => void
   onPrint: () => void
 }
@@ -95,6 +96,7 @@ export default function StatusBar(props: Props) {
     onStop,
     ui,
     onSlider,
+    onFocusDriver,
     onSave,
     onPrint
   } = props
@@ -144,7 +146,12 @@ export default function StatusBar(props: Props) {
               Connect
             </IonButton>
           ) : (
-            <IonButton expand="block" color="danger" onClick={onDisconnect}>
+            <IonButton
+              expand="block"
+              color="danger"
+              disabled={!online}
+              onClick={onDisconnect}
+            >
               Disconnect
             </IonButton>
           )}
@@ -169,7 +176,24 @@ export default function StatusBar(props: Props) {
           <div className="sb-sec-title">ML Metrics</div>
           <Indicator label="Concentration" value={ui.concentration} />
           <Indicator label="Relaxation" value={ui.relaxation} />
-          <Indicator label="Meditative state" value={ui.mindfulness} />
+          {/* "Meditative state" (BrainFlow MINDFULNESS) is disabled -- Concentration
+              is now backed by that same metric, so this duplicated it.
+              <Indicator label="Meditative state" value={ui.mindfulness} /> */}
+
+          <div className="sb-sub">
+            <span className="indicator-label">
+              Focus driver <small>sharpens + calms</small>
+            </span>
+            <IonSelect
+              aria-label="Focus driver"
+              interface="popover"
+              value={ui.focusDriver}
+              onIonChange={(e) => onFocusDriver(e.detail.value)}
+            >
+              <IonSelectOption value="concentration">Concentration</IonSelectOption>
+              <IonSelectOption value="relaxation">Relaxation</IonSelectOption>
+            </IonSelect>
+          </div>
         </section>
 
         <section className="sb-sec">

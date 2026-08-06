@@ -460,13 +460,16 @@ class BrowserUI:
                     for i in range(int(concentration_prediction * 100)):
                         progress_bar.progress(i, text=f"Concentration Prediction: {i}%")
 
-                    mindfulness_prediction = feature_vector[6]
+                    # Mindfulness is no longer a separate element of the feature
+                    # vector -- concentration above is backed by BrainFlow's
+                    # MINDFULNESS metric, so it was the same reading twice.
+                    # mindfulness_prediction = feature_vector[6]
+                    #
+                    # progress_bar = st.progress(0, text="Mindfulness Prediction: 0%")
+                    # for i in range(int(mindfulness_prediction * 100)):
+                    #     progress_bar.progress(i, text=f"Mindfulness Prediction: {i}%")
 
-                    progress_bar = st.progress(0, text="Mindfulness Prediction: 0%")
-                    for i in range(int(mindfulness_prediction * 100)):
-                        progress_bar.progress(i, text=f"Mindfulness Prediction: {i}%")
-
-                    relaxation_prediction = feature_vector[7]
+                    relaxation_prediction = feature_vector[6]
 
                     progress_bar = st.progress(0, text="Relaxation Prediction: 0%")
                     for i in range(int(relaxation_prediction * 100)):

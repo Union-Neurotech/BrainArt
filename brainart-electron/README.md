@@ -104,6 +104,83 @@ among the enabled boards means only the OpenBCI Cyton.
 Connecting scans for the device and can take several seconds. On failure the
 console logs `Failed to connect to Muse2. Check device/port.`
 
+## What the metrics do to the image
+
+The backend sends seven values; the renderer maps them to shader uniforms in
+`emotionToVisuals()`
+([renderer.js:75-100](brainart-electron/src/renderer/src/gl/renderer.js#L75-L100)).
+
+### Band powers
+
+| Band | Hz (BrainFlow) | Uniform | Visible effect |
+|---|---|---|---|
+| **Delta** | 1–4 | `u_speed` | **Animation rate.** Higher delta = faster drift. |
+| **Theta** | 4–8 | `u_chaos` | **Turbulence.** Distorts the polar radius/angle, breaking up smooth shapes. |
+| **Alpha** | 8–13 | `u_radial` | **Symmetry.** Blends cartesian → radial coordinates, making the image more mandala-like. |
+| **Beta** | 13–30 | `u_zoom` (inverse), `u_complexity` | **Tightness + detail.** Higher beta zooms in and adds finer structure. |
+| **Gamma** | 30–45 | `u_sat`, `u_warp` | **Saturation + warp depth.** Higher gamma = more vivid and more contorted. |
+
+### ML metrics
+
+| Metric | BrainFlow source | Effect |
+|---|---|---|
+| **Concentration** | `BrainFlowMetrics.MINDFULNESS` | Feeds the *focus* effect (see below), if selected. |
+| **Relaxation** | `BrainFlowMetrics.RESTFULNESS` | Adds to `u_zoom` — pulls back and softens. Also feeds *focus* if selected. |
+
+**The focus effect** adds to `u_complexity` (sharper structure) and damps both
+`u_chaos` and `u_speed` — it sharpens and calms the image at the same time. The
+**Focus driver** dropdown in the ML Metrics section picks which metric drives it.
+
+> **These two metrics are one signal.** BrainFlow computes `RESTFULNESS` as the
+> exact complement of `MINDFULNESS` — verified bit-exact (`mindful + restful == 1.0`)
+> across 300 random band-power vectors, with zero floating-point error. So
+> `relaxation === 1 - concentration`, always. The dropdown therefore doesn't add a
+> second input; it flips which end of that single axis reads as "focused".
+> Picking **Relaxation** inverts the effect: the image sharpens and calms as you
+> relax rather than as you focus.
+
+> **Naming:** BrainFlow ships only `MINDFULNESS`, `RESTFULNESS` and `USER_DEFINED`
+> — there is no `CONCENTRATION` or `RELAXATION` metric. This app surfaces
+> `MINDFULNESS` as "Concentration" and `RESTFULNESS` as "Relaxation".
+> A "Meditative state" indicator used to show `MINDFULNESS` separately; it was
+> removed once Concentration was bound to the same metric.
+
+**Valence, Arousal and Depth are never sent by the backend** — they are manual
+sliders only.
+
+### Two things to know before tuning
+
+1. **Band powers are normalized to sum to 1**
+   ([preprocessing.py:217](src/preprocessing.py#L217)), so each one realistically
+   sits around 0.1–0.4 and never approaches 1.0. The coefficients were originally
+   tuned against 0..1 sliders, which is why live EEG moves the visuals less than
+   dragging the sliders does. If a band feels inert, its coefficient probably
+   needs to be several times larger, not the signal "not working".
+2. **The two ML metrics are true 0..1**, so they dominate the live look.
+
+> On the **Synthetic** board these metrics commonly pin at `concentration = 1.00`
+> and `relaxation = 0.00` — its output is generated waveforms, not physiological
+> EEG, so BrainFlow's classifiers saturate. Synthetic is good for exercising the
+> band powers and the plumbing; judge the ML metrics on a real headset.
+
+## Where to change the mapping
+
+| To change | Edit |
+|---|---|
+| How strongly a metric affects the image | The coefficients in `emotionToVisuals()`, [renderer.js:75-100](brainart-electron/src/renderer/src/gl/renderer.js#L75-L100) — start here |
+| What a uniform actually does to the pixels | [gl/cppn.js](brainart-electron/src/renderer/src/gl/cppn.js) (the fragment shader) |
+| Which metrics get computed and sent | `get_simple_feature_vector` ([preprocessing.py:171](src/preprocessing.py#L171)) **and** `METRIC_KEYS` ([server.py:100](src/server.py#L100)) — these are zipped together, so they must stay in the same order |
+| Which metrics are displayed | The `Indicator` rows in [StatusBar.tsx:167-184](brainart-electron/src/renderer/src/components/StatusBar.tsx#L167-L184) |
+| Which BrainFlow model backs a metric | `get_concentration_value` / `get_relaxation_value` ([preprocessing.py:269-325](src/preprocessing.py#L269-L325)) |
+| Update rate and smoothing | `METRICS_HZ`, `METRICS_WINDOW_SEC`, `METRICS_EMA_ALPHA` ([server.py:92-98](src/server.py#L92-L98)) |
+| Idle values before any device connects | `DEFAULT_STATE` ([state.ts](brainart-electron/src/renderer/src/state.ts)) |
+
+Adding a metric means touching four places: compute it in the feature vector, add
+its key to `METRIC_KEYS`, add the field to `BrainState`/`DEFAULT_STATE`, then use
+it in `emotionToVisuals()`. The renderer silently ignores patch keys that aren't
+already in `BrainState`, so a missing field shows up as "the value never changes"
+rather than an error.
+
 ### Driving the visuals by hand
 
 The **Emotion** sliders write to the same visual state the backend patches, so

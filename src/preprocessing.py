@@ -177,7 +177,7 @@ def get_simple_feature_vector(data:pd.DataFrame, boardID:int):
         :boardID: The ID of the board used to collect the data
     
     Returns:
-        :simple_feature_vector: A 8-index array containing the features extracted from the data
+        :simple_feature_vector: A 7-index array containing the features extracted from the data
 
         The feature vector contains the following information:
         0: Alpha Bandpower
@@ -185,9 +185,11 @@ def get_simple_feature_vector(data:pd.DataFrame, boardID:int):
         2: Delta Bandpower
         3: Theta Bandpower
         4: Gamma Bandpower
-        5: Concentration Prediction
-        6: Mindfulness Prediction
-        7: Relaxation Prediction
+        5: Concentration Prediction   (BrainFlow MINDFULNESS metric)
+        6: Relaxation Prediction      (BrainFlow RESTFULNESS metric)
+
+        NOTE: this order is mirrored by METRIC_KEYS in server.py, which zips
+        against it. Change one and you must change the other.
     """
     eeg_channels = BoardShim.get_eeg_channels(boardID)
     sampling_rate = BoardShim.get_sampling_rate(boardID)
@@ -210,13 +212,18 @@ def get_simple_feature_vector(data:pd.DataFrame, boardID:int):
 
     # Get ML_Predictions
     concentration = get_concentration_value(data=data, boardID=boardID, sampling_rate=sampling_rate)
-    mindfulness = get_mindfulness_value(data=data, boardID=boardID, sampling_rate=sampling_rate)
     relaxation = get_relaxation_value(data=data, boardID=boardID, sampling_rate=sampling_rate)
+    # Mindfulness ("Meditative state") is disabled: concentration is now backed by
+    # the same BrainFlow MINDFULNESS metric, so this was a duplicate reading and an
+    # extra inference per tick. get_mindfulness_value() is kept below -- uncomment
+    # this line and re-add mindfulness[0] to the tuple (and to METRIC_KEYS in
+    # server.py, plus the UI indicator) to restore it.
+    # mindfulness = get_mindfulness_value(data=data, boardID=boardID, sampling_rate=sampling_rate)
 
     # Normalize the band powers so they sum to 1.
     bands_global = bands_global / np.sum(bands_global)
 
-    simple_feature_vector = np.array((bands_global[0], bands_global[1], bands_global[2], bands_global[3], bands_global[4], concentration[0], mindfulness[0], relaxation[0]))
+    simple_feature_vector = np.array((bands_global[0], bands_global[1], bands_global[2], bands_global[3], bands_global[4], concentration[0], relaxation[0]))
 
     return simple_feature_vector
 
@@ -268,8 +275,14 @@ def get_ML_prediction_value(data, boardID, ML_Model, Classifier, sampling_rate, 
 
 def get_concentration_value(data:pd.DataFrame, boardID:int, sampling_rate:int, chunk_size=5):
     """
-    Gets the concetration value from the data.
-    
+    Gets the concentration value from the data.
+
+    Backed by BrainFlow's built-in MINDFULNESS metric, surfaced to the app as
+    "concentration". BrainFlow ships only MINDFULNESS, RESTFULNESS and
+    USER_DEFINED -- there is no CONCENTRATION metric. This previously used the
+    bundled USER_DEFINED ONNX model (models/forest_concentration.onnx); that file
+    is left in place but is no longer on the live path.
+
     Parameters:
         :data: A pandas dataframe containing the data
         :sampling_rate: The sampling rate of the data
@@ -277,11 +290,11 @@ def get_concentration_value(data:pd.DataFrame, boardID:int, sampling_rate:int, c
 
     Returns:
         :concentration_value: A float value between 0 and 1 representing the concentration value
-    """    
-    return get_ML_prediction_value(data=data, boardID=boardID, ML_Model=BrainFlowMetrics.USER_DEFINED, Classifier=BrainFlowClassifiers.ONNX_CLASSIFIER, \
-                                   modelpath='forest_concentration.onnx', sampling_rate=sampling_rate, chunk_size=chunk_size)
+    """
+    return get_ML_prediction_value(data=data, boardID=boardID, ML_Model=BrainFlowMetrics.MINDFULNESS, Classifier=BrainFlowClassifiers.DEFAULT_CLASSIFIER, \
+                                   sampling_rate=sampling_rate, chunk_size=chunk_size)
 
-def get_mindfulness_value(data:pd.DataFrame, boardID:int, sampling_rate:int, chunk_size=5):
+def get_mindfulness_value(data:pd.DataFrame, boardID:int, sampling_rate:int, chunk_size=10):
     """
     Gets the mindfulness value from the data.
 
@@ -298,7 +311,7 @@ def get_mindfulness_value(data:pd.DataFrame, boardID:int, sampling_rate:int, chu
     return get_ML_prediction_value(data=data, boardID=boardID, ML_Model=BrainFlowMetrics.MINDFULNESS, Classifier=BrainFlowClassifiers.DEFAULT_CLASSIFIER, \
                                    sampling_rate=sampling_rate, chunk_size=chunk_size)
 
-def get_relaxation_value(data:pd.DataFrame, boardID:int, sampling_rate:int, chunk_size=5):
+def get_relaxation_value(data:pd.DataFrame, boardID:int, sampling_rate:int, chunk_size=10):
     """
     Gets the relaxation value from the data.
 
