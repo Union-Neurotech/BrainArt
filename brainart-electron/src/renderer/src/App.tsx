@@ -78,14 +78,20 @@ export default function App() {
   const onStart = () => send({ type: 'start' })
   const onStop = () => send({ type: 'stop' })
 
-  const onSave = () => {
+  // Capture the canvas and hand it to the backend, which writes the file and
+  // logs the path back. Both failure modes report themselves -- silence here is
+  // what made a failed save indistinguishable from a dead button.
+  const sendImage = (type: 'save_image' | 'print_image') => {
     const png = viewportRef.current?.screenshot()
-    if (png) send({ type: 'save_image', png })
+    if (!png) {
+      addLog('error', 'Could not capture the canvas.')
+      return
+    }
+    if (!send({ type, png })) addLog('error', 'Backend offline — image not sent.')
   }
-  const onPrint = () => {
-    const png = viewportRef.current?.screenshot()
-    if (png) send({ type: 'print_image', png })
-  }
+
+  const onSave = () => sendImage('save_image')
+  const onPrint = () => sendImage('print_image')
 
   return (
     <IonApp>

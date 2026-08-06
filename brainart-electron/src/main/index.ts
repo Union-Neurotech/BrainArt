@@ -22,8 +22,24 @@ function resolvePython(): string {
 
 function startBackend(): void {
   const python = resolvePython()
-  console.log(`[main] spawning backend: ${python} ${SERVER_SCRIPT} --port ${WS_PORT}`)
-  py = spawn(python, [SERVER_SCRIPT, '--port', String(WS_PORT)], {
+  const args = [SERVER_SCRIPT, '--port', String(WS_PORT)]
+
+  // Images go to the user's Downloads folder by default. Resolve it here rather
+  // than letting Python guess: app.getPath('downloads') asks the OS for the real
+  // known-folder location, which is correct even when Downloads has been moved
+  // off ~/. Opt out with BRAINART_SAVE_TO_PROJECT=1, or point somewhere specific
+  // with BRAINART_IMAGE_DIR -- in that case pass no flag at all, since a CLI
+  // flag would take precedence over the env var the backend is meant to read.
+  if (process.env.BRAINART_IMAGE_DIR) {
+    // inherited through env below
+  } else if (process.env.BRAINART_SAVE_TO_PROJECT) {
+    args.push('--project-images')
+  } else {
+    args.push('--image-dir', app.getPath('downloads'))
+  }
+
+  console.log(`[main] spawning backend: ${python} ${args.join(' ')}`)
+  py = spawn(python, args, {
     cwd: join(PROJECT_ROOT, 'src'),
     env: { ...process.env, BRAINART_WS_PORT: String(WS_PORT) }
   })

@@ -38,7 +38,51 @@ from communications import Comms
 from preprocessing import get_simple_feature_vector
 
 PROJECT_ROOT = os.path.dirname(THIS_DIR)
-IMAGE_DIR = os.path.join(PROJECT_ROOT, "generated", "images")
+PROJECT_IMAGE_DIR = os.path.join(PROJECT_ROOT, "generated", "images")
+
+
+def downloads_dir():
+    """Best-effort path to the current user's Downloads folder.
+
+    Not just ~/Downloads: the folder is relocatable on Windows (and localized
+    on Linux), so consult the OS's own record of it before falling back.
+    """
+    home = os.path.expanduser("~")
+
+    if sys.platform.startswith("win"):
+        # The "Downloads" known folder. Users can move it to another drive, in
+        # which case ~/Downloads doesn't exist at all.
+        guid = "{374DE290-123F-4565-9164-39C4925E467B}"
+        try:
+            import winreg
+
+            key = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+                path = os.path.expandvars(winreg.QueryValueEx(k, guid)[0])
+                if path:
+                    return path
+        except Exception:
+            pass
+
+    elif not sys.platform == "darwin":
+        # Linux/BSD: XDG user dirs, which may be localized (e.g. "Téléchargements").
+        xdg = os.environ.get("XDG_DOWNLOAD_DIR")
+        if xdg:
+            return os.path.expandvars(xdg)
+        try:
+            cfg = os.path.join(
+                os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"),
+                "user-dirs.dirs",
+            )
+            with open(cfg, encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("XDG_DOWNLOAD_DIR"):
+                        raw = line.split("=", 1)[1].strip().strip('"')
+                        return os.path.expandvars(raw.replace("$HOME", home))
+        except Exception:
+            pass
+
+    return os.path.join(home, "Downloads")
 
 PREVIEW_HZ = 15            # how often live wave snapshots are pushed
 PREVIEW_SAMPLES = 256      # samples per channel in each snapshot
@@ -68,7 +112,10 @@ def _board_id(info):
 
 
 class Backend:
-    def __init__(self):
+    def __init__(self, image_dir=None):
+        # Default destination is the user's Downloads folder -- saved artwork is
+        # something people go looking for, and it shouldn't be buried in the repo.
+        self.image_dir = image_dir or downloads_dir()
         self.clients = set()
         self.comms = None
         self.board_id = None
@@ -304,8 +351,15 @@ class Backend:
             return None
         if "," in b64:                       # strip a data: URL header if present
             b64 = b64.split(",", 1)[1]
-        os.makedirs(IMAGE_DIR, exist_ok=True)
-        path = os.path.join(IMAGE_DIR, f"brainart_{time.strftime('%Y%m%d_%H%M%S')}.png")
+        os.makedirs(self.image_dir, exist_ok=True)
+        # Timestamps are second-resolution, so two saves in the same second would
+        # otherwise overwrite each other. Suffix until the name is free.
+        stem = os.path.join(self.image_dir, f"brainart_{time.strftime('%Y%m%d_%H%M%S')}")
+        path = f"{stem}.png"
+        n = 1
+        while os.path.exists(path):
+            path = f"{stem}_{n}.png"
+            n += 1
         with open(path, "wb") as f:
             f.write(base64.b64decode(b64))
         return path
@@ -355,8 +409,20 @@ class Backend:
                 except Exception:
                     continue
                 await self.handle(ws, msg)
-        except websockets.ConnectionClosed:
-            pass
+        except websockets.ConnectionClosed as e:
+            # Don't swallow this. A frame the server *refuses* (e.g. one that
+            # exceeds max_size) shows up here as a close we sent, with no trace
+            # anywhere else -- that is what made oversized screenshot saves fail
+            # invisibly. Check both sides: the initiator carries the real code.
+            # Print rather than self.log(), since the socket is already gone;
+            # this lands in the Electron main process as "[py] ...".
+            for side, close in (("sent", e.sent), ("recv", e.rcvd)):
+                if close is not None and close.code != 1000:
+                    print(
+                        f"[error] Renderer socket closed ({side}): "
+                        f"{close.code} {close.reason}",
+                        flush=True,
+                    )
         finally:
             self.clients.discard(ws)
 
@@ -368,11 +434,42 @@ async def main():
         "--port", type=int,
         default=int(os.environ.get("BRAINART_WS_PORT", 17321)),
     )
+    dest = parser.add_mutually_exclusive_group()
+    dest.add_argument(
+        "--downloads", action="store_true",
+        help="save images to the user's Downloads folder (this is the default)",
+    )
+    dest.add_argument(
+        "--project-images", action="store_true",
+        help="save images to <project>/generated/images instead of Downloads",
+    )
+    dest.add_argument(
+        "--image-dir", metavar="DIR",
+        help="save images to DIR (overrides $BRAINART_IMAGE_DIR)",
+    )
     args = parser.parse_args()
 
-    backend = Backend()
+    # Precedence: explicit flag > $BRAINART_IMAGE_DIR > Downloads (the default).
+    if args.downloads:
+        image_dir = downloads_dir()
+    elif args.project_images:
+        image_dir = PROJECT_IMAGE_DIR
+    else:
+        image_dir = args.image_dir or os.environ.get("BRAINART_IMAGE_DIR") or None
+
+    backend = Backend(image_dir)
     print(f"BrainArt backend listening on ws://{args.host}:{args.port}", flush=True)
-    async with websockets.serve(backend.ws_handler, args.host, args.port):
+    print(f"Saving images to: {backend.image_dir}", flush=True)
+    # max_size=None: screenshots arrive on this socket as base64 PNG data URLs,
+    # which run to several MB for a detailed frame. The websockets default is a
+    # 1 MiB inbound cap, and exceeding it kills the connection (close 1009)
+    # *without* delivering the message -- which is exactly how "Save Image"
+    # silently did nothing for any PNG over ~768 KiB, i.e. the busy frames that
+    # live EEG produces. Unbounded is fine here: the listener is loopback-only
+    # and carries a single local renderer.
+    async with websockets.serve(
+        backend.ws_handler, args.host, args.port, max_size=None
+    ):
         await asyncio.Future()  # run forever
 
 

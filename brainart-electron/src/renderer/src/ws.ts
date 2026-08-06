@@ -28,7 +28,7 @@ const WS_URL = `ws://127.0.0.1:${WS_PORT}`
  * Returns `send` for outbound commands and `online` for the socket state.
  */
 export function useBackend(handlers: BackendHandlers): {
-  send: (obj: unknown) => void
+  send: (obj: unknown) => boolean
   online: boolean
 } {
   const wsRef = useRef<WebSocket | null>(null)
@@ -45,8 +45,17 @@ export function useBackend(handlers: BackendHandlers): {
       wsRef.current = ws
 
       ws.onopen = () => setOnline(true)
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         setOnline(false)
+        // Surface abnormal closes. The reconnect below otherwise hides them
+        // completely: a frame the backend refuses (close 1009, "message too
+        // big") looks identical to nothing having happened at all.
+        if (!closed && ev.code !== 1000) {
+          handlersRef.current.onLog?.(
+            'error',
+            `Backend connection lost (code ${ev.code}${ev.reason ? `: ${ev.reason}` : ''}); reconnecting…`
+          )
+        }
         if (!closed) retry = setTimeout(connect, 1000)
       }
       ws.onerror = () => ws.close()
@@ -86,9 +95,12 @@ export function useBackend(handlers: BackendHandlers): {
     }
   }, [])
 
-  const send = useCallback((obj: unknown) => {
+  /** Returns false if the socket wasn't open, so callers can report the drop. */
+  const send = useCallback((obj: unknown): boolean => {
     const ws = wsRef.current
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj))
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false
+    ws.send(JSON.stringify(obj))
+    return true
   }, [])
 
   return { send, online }
