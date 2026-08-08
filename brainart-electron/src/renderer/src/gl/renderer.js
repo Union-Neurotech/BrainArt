@@ -82,6 +82,9 @@ export function createRenderer(canvas, stateRef) {
     const focus = E.focusDriver === 'relaxation' ? E.relaxation : E.concentration
     // Ceiling is 0.85 rather than 1.0 so that even at zero focus the motion stays
     // watchable instead of frantic -- raise toward 1.0 for a livelier idle.
+    
+    // Focus controls a damper and sharpness of the image
+    
     const damp = 0.85 - focus * 0.45
     const sharp = focus * 0.5
     const soft = E.relaxation * 0.4
@@ -93,7 +96,7 @@ export function createRenderer(canvas, stateRef) {
     // Delta controls speed
     // Alpha controls radial look
     // Beta controls complexity
-    
+
     return {
       hue_shift: v * shift_damper,
       warm: v,

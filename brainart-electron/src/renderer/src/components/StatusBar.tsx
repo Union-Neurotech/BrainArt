@@ -174,18 +174,16 @@ export default function StatusBar(props: Props) {
         {/* - Live / measured metrics - */}
         <section className="sb-sec">
           <div className="sb-sec-title">ML Metrics</div>
-          <Indicator label="Concentration" value={ui.concentration} />
-          <Indicator label="Relaxation" value={ui.relaxation} />
-          {/* "Meditative state" (BrainFlow MINDFULNESS) is disabled -- Concentration
-              is now backed by that same metric, so this duplicated it.
-              <Indicator label="Meditative state" value={ui.mindfulness} /> */}
 
-          <div className="sb-sub">
+          {/* ponytail: one bar, not two. RESTFULNESS is the exact complement of
+              MINDFULNESS (see state.ts), so relaxation === 1 - concentration and the
+              focus-driver picker doubles as the view switcher. */}
+          <div className="sb-sub sb-sub--lead">
             <span className="indicator-label">
-              Focus driver <small>sharpens + calms</small>
+              Metric <small>drives focus</small>
             </span>
             <IonSelect
-              aria-label="Focus driver"
+              aria-label="Metric"
               interface="popover"
               value={ui.focusDriver}
               onIonChange={(e) => onFocusDriver(e.detail.value)}
@@ -194,6 +192,14 @@ export default function StatusBar(props: Props) {
               <IonSelectOption value="relaxation">Relaxation</IonSelectOption>
             </IonSelect>
           </div>
+
+          <Indicator
+            label={ui.focusDriver === 'relaxation' ? 'Relaxation' : 'Concentration'}
+            value={ui[ui.focusDriver]}
+          />
+          {/* "Meditative state" (BrainFlow MINDFULNESS) is disabled -- Concentration
+              is now backed by that same metric, so this duplicated it.
+              <Indicator label="Meditative state" value={ui.mindfulness} /> */}
         </section>
 
         <section className="sb-sec">
