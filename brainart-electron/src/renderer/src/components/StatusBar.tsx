@@ -111,7 +111,7 @@ export default function StatusBar(props: Props) {
       </div>
 
       <div className="sb-scroll">
-        {/* ── Device / connection ── */}
+        {/* - Device / connection - */}
         <section className="sb-sec">
           <div className="sb-sec-title">Device</div>
           <IonSelect
@@ -171,7 +171,7 @@ export default function StatusBar(props: Props) {
           </div>
         </section>
 
-        {/* ── Live / measured metrics ── */}
+        {/* - Live / measured metrics - */}
         <section className="sb-sec">
           <div className="sb-sec-title">ML Metrics</div>
           <Indicator label="Concentration" value={ui.concentration} />
@@ -205,7 +205,7 @@ export default function StatusBar(props: Props) {
           <Indicator label="Gamma (γ)" value={ui.gamma} />
         </section>
 
-        {/* ── Emotion (manual sliders this iteration) ── */}
+        {/* - Emotion (manual sliders this iteration) - */}
         <section className="sb-sec">
           <div className="sb-sec-title">Emotion</div>
           <Slider

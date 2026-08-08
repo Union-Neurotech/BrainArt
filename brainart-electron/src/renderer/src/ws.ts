@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+// websockets interface
+
 export interface Board {
   name: string
   id: number

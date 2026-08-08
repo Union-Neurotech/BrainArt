@@ -87,6 +87,13 @@ export function createRenderer(canvas, stateRef) {
     const soft = E.relaxation * 0.4
     const shift_damper = 0.5
     const ap = (a + 1) * 0.5
+
+    // Gamma controls saturation.
+    // Theta controls chaos
+    // Delta controls speed
+    // Alpha controls radial look
+    // Beta controls complexity
+    
     return {
       hue_shift: v * shift_damper,
       warm: v,
