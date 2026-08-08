@@ -85,7 +85,7 @@ To run the backend by itself (useful for debugging it in isolation):
 1. Leave the device dropdown on **Synthetic** (it's selected by default).
 2. **Connect** → the console logs `Connected to Synthetic (N EEG channels)`.
 3. **Start** → raw traces appear in the debug console's wave preview immediately.
-4. After a ~4 s warm-up (`METRICS_WINDOW_SEC`), live metrics begin flowing at
+4. After a ~5 s warm-up (`METRICS_WINDOW_SEC`), live metrics begin flowing at
    ~10 Hz: the EEG band and ML-metric indicators fill in, and the artwork starts
    responding to them.
 5. **Stop** → streaming ends and the backend computes one averaged feature vector

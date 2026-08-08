@@ -93,8 +93,10 @@ METRICS_HZ = 10            # target cadence; the loop is sequential, so it never
                            # overlaps computations and self-throttles to the
                            # actual ML compute time (slower hardware just emits
                            # less often, down toward ~1 Hz).
-METRICS_WINDOW_SEC = 4.0   # recent-data window the rolling metrics summarize;
+METRICS_WINDOW_SEC = 5.0   # recent-data window the rolling metrics summarize;
                            # also acts as the warm-up gate (no emit until full).
+                           # ponytail: edit this to 10.0 for a steadier, laggier
+                           # read -- the warm-up delay grows with it.
 METRICS_EMA_ALPHA = 0.3    # EMA smoothing factor (higher = snappier, noisier).
 
 # Keys returned by get_simple_feature_vector, in order. These mirror the
