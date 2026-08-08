@@ -17,7 +17,7 @@ Decisions confirmed with the user:
   sliders.")
 - **Emotion:** arousal/valence are **manual sliders** this iteration (no emotion
   model exists in Python yet), with a clean extension point for a future estimator.
-- **Packaging:** **dev-run first** — `npm run dev` launches Electron, which spawns
+- **Packaging:** **dev-run first** - `npm run dev` launches Electron, which spawns
   the existing system/venv Python backend. One-file installer is a later step.
 
 Keep it simple: three basic React components (Viewport, StatusBar, DebugConsole)
@@ -54,19 +54,19 @@ Renderer → Python:
 - `{type:"print_image", png:"<base64>"}`
 
 Python → Renderer:
-- `{type:"boards", boards:[{name,id,using_port}]}` — from `board_id_pairs`
-- `{type:"log", level:"info|error", message}` — drives the debug console
+- `{type:"boards", boards:[{name,id,using_port}]}` - from `board_id_pairs`
+- `{type:"log", level:"info|error", message}` - drives the debug console
 - `{type:"status", connected, streaming, device}`
-- `{type:"waves", channels:[[..],[..]]}` — live preview chunk (~15 Hz, last N
+- `{type:"waves", channels:[[..],[..]]}` - live preview chunk (~15 Hz, last N
   samples per EEG channel, non-draining)
 - `{type:"state", patch:{alpha,beta,delta,theta,gamma,concentration,mindfulness,
-  relaxation,...}}` — **generic external slider/visual setter**; the averaged
+  relaxation,...}}` - **generic external slider/visual setter**; the averaged
   metrics after Stop arrive as one of these.
 
 Port is a shared constant `17321` (main passes `--port`, renderer dials the same;
 overridable via env). Renderer auto-reconnects if the socket drops.
 
-## Python backend — `src/server.py` (new)
+## Python backend - `src/server.py` (new)
 
 Reuses existing code directly; no rewrite of device logic:
 - `src/communications.py` → `Comms` (connect/disconnect/start_stream/stop_stream).
@@ -74,7 +74,7 @@ Reuses existing code directly; no rewrite of device logic:
   `board.get_board_data()` once on Stop to drain the full window.
 - `src/preprocessing.py` → `get_simple_feature_vector(data, boardID)` returns
   `[alpha, beta, delta, theta, gamma, concentration, mindfulness, relaxation]`
-  (bands normalized to sum 1, ML metrics 0..1) — maps 1:1 onto the shader's 0..1
+  (bands normalized to sum 1, ML metrics 0..1) - maps 1:1 onto the shader's 0..1
   slider state. Computed once over the whole Start→Stop window (the requested
   averaging) and emitted as a `state` patch.
 - `src/assets.py` → `board_id_pairs` for the boards list and port requirement.
@@ -82,15 +82,15 @@ Reuses existing code directly; no rewrite of device logic:
 Server uses the `websockets` library (asyncio): one connection handler, a command
 dispatch, and a background task that, while streaming, peeks recent samples and
 emits `waves` on a timer. Save writes to `generated/images/brainart_<ts>.png`;
-print saves then calls OS print (`os.startfile(path, "print")` on Windows) — a
+print saves then calls OS print (`os.startfile(path, "print")` on Windows) - a
 clearly isolated `print_image()` function as the extension point.
 
 Add `websockets` to `requirements.txt`.
 
-## Electron app — scaffold in `brainart-electron/` (electron-vite, React + TS, Ionic)
+## Electron app - scaffold in `brainart-electron/` (electron-vite, React + TS, Ionic)
 
 UI is built from the **Ionic React** component framework (`@ionic/react`,
-`ionicons`) — standard elements rather than hand-rolled CSS: `IonSelect`/
+`ionicons`) - standard elements rather than hand-rolled CSS: `IonSelect`/
 `IonSelectOption` (device dropdown), `IonButton` (Connect/Disconnect/Start/Stop/
 Save/Print), `IonRange` (sliders), `IonItem`/`IonLabel`/`IonText`/`IonList`
 (indicators + grouping), `IonProgressBar` (band/metric bars). Use Ionic's built-in
@@ -113,7 +113,7 @@ brainart-electron/
         ws.ts                      useBackend() WS hook: send() + event dispatch
         gl/cppn.js, gl/vertex.js   copied verbatim from new_web_variant/
         gl/renderer.js             createRenderer(canvas, stateRef): adapted from
-                                   new_web_variant/brainart_emotion.js — keeps the
+                                   new_web_variant/brainart_emotion.js - keeps the
                                    exact uniform set + RAF loop, but reads
                                    stateRef.current instead of DOM; exposes
                                    setSize() and screenshot(); fixed 16:9 backing
@@ -134,7 +134,7 @@ brainart-electron/
 ```
 
 App layout: `<IonApp>` wrapping a structural CSS grid
-(`columns: 1fr 300px; rows: 1fr 160px;`) — Viewport at (1,1), DebugConsole at (2,1),
+(`columns: 1fr 300px; rows: 1fr 160px;`) - Viewport at (1,1), DebugConsole at (2,1),
 StatusBar spans both rows in column 2 (full height), matching the mockup. Theming is
 Ionic's dark palette; only this grid + the two canvases use bespoke CSS.
 
@@ -144,7 +144,7 @@ Save Image: renderer `canvas.toDataURL('image/png')` → strip header → send
 ## Reuse summary
 - Copy verbatim: `new_web_variant/cppn.js`, `new_web_variant/vertex.js`.
 - Adapt (decouple from DOM): `new_web_variant/brainart_emotion.js` → `gl/renderer.js`.
-- UI elements: Ionic React components (`@ionic/react`) + Ionic dark palette — no
+- UI elements: Ionic React components (`@ionic/react`) + Ionic dark palette - no
   custom theme port from `brainart_emotion.html`.
 - Python, used as-is: `Comms` (communications.py), `get_simple_feature_vector`
   (preprocessing.py), `board_id_pairs` (assets.py).
@@ -153,12 +153,12 @@ Save Image: renderer `canvas.toDataURL('image/png')` → strip header → send
 - Not needed: the `brainart-tauri/brainflow/` C++ clone (Python uses pip `brainflow`);
   `brainart-tauri/` itself is reference-only and stays untouched.
 
-## Verification (Synthetic board — no hardware needed)
+## Verification (Synthetic board - no hardware needed)
 1. `pip install -r requirements.txt` (now includes `websockets`).
 2. Backend alone: `python src/server.py --port 17321`; with a tiny WS test script,
    send `list_boards` → `connect Synthetic` → `start` (see `waves`) → `stop` (see a
    `state` patch with the 8 metrics).
-3. `cd brainart-electron && npm install && npm run dev` — Electron opens, main
+3. `cd brainart-electron && npm install && npm run dev` - Electron opens, main
    spawns python, renderer reports connected in the console.
 4. End-to-end in the app: select **Synthetic** → **Connect** (console logs success,
    button turns red "Disconnect") → **Start** (preview traces animate, visual

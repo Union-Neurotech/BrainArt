@@ -60,8 +60,10 @@ class Comms:
             finally:
                 self.is_connected = False
 
-    def start_stream(self):
-        self.board.start_stream()
+    def start_stream(self, num_samples=450000):
+        # Explicit buffer size (BrainFlow's own default) so the caller that saves
+        # the session can state the ceiling it is working against.
+        self.board.start_stream(num_samples)
 
     def stop_stream(self):
         self.board.stop_stream()
@@ -76,8 +78,6 @@ class Comms:
         print(self.board.get_board_data())
         return self.board.get_board_data()
     
-    def save_data(self):
-        if self.save_data:
-            # save data as csv and edf files
-            # self.board.save_board_data_as_csv("board_data.csv", "w")
-            pass
+    # save_data() lived here as an empty stub whose `if self.save_data:` tested the
+    # method object itself (always truthy). Session recording is real now and lives
+    # in Backend._write_csv (server.py), which has the board_id for column names.

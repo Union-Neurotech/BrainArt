@@ -19,7 +19,7 @@ export interface BrainState {
   /**
    * Which metric drives the "focus" effect (sharpens structure, damps chaos and
    * speed). BrainFlow's RESTFULNESS is the exact complement of its MINDFULNESS
-   * — verified bit-exact over random band-power vectors — so concentration and
+   * - verified bit-exact over random band-power vectors - so concentration and
    * relaxation are one signal, and this selects which end of it reads as
    * "focused". Not a metric; the backend never patches it.
    */
@@ -29,7 +29,7 @@ export interface BrainState {
 export type FocusDriver = 'concentration' | 'relaxation'
 
 /**
- * Keys of BrainState that hold numbers — i.e. everything the sliders and the
+ * Keys of BrainState that hold numbers - i.e. everything the sliders and the
  * backend's metric patches may write. Excludes `focusDriver`, so a slider can't
  * be pointed at it by mistake.
  */

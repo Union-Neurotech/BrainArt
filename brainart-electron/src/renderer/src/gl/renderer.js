@@ -1,4 +1,4 @@
-// Adapted from new_web_variant/brainart_emotion.js — the exact CPPN uniform set
+// Adapted from new_web_variant/brainart_emotion.js - the exact CPPN uniform set
 // and render loop, but decoupled from the DOM: it reads its visual parameters
 // from `stateRef.current` each frame, renders into a fixed 16:9 backing store
 // (so screenshots are always 16:9), and exposes a tiny imperative API.
@@ -124,7 +124,7 @@ export function createRenderer(canvas, stateRef) {
 
   // Draw a single frame at the given elapsed time. No RAF scheduling here, so it
   // can also be called synchronously by screenshot() (needed now that
-  // preserveDrawingBuffer is off — the buffer is only valid right after a draw).
+  // preserveDrawingBuffer is off - the buffer is only valid right after a draw).
   function drawFrame(elapsed) {
     if (!mouse.down) mouse.str = Math.max(0, mouse.str - 0.025)
 
@@ -153,7 +153,7 @@ export function createRenderer(canvas, stateRef) {
 
     // Force the GPU to finish AND resolve this frame before the RAF callback yields
     // and the compositor presents the canvas. Otherwise Electron/Chromium presents
-    // the texture before the draw completes — a present race that shows as the
+    // the texture before the draw completes - a present race that shows as the
     // viewport flickering between partial/garbled frames. On this GPU/driver,
     // gl.finish() alone does NOT prevent it; a 1px readPixels (which forces a real
     // buffer resolve/readback) is what reliably does. Keep this line.

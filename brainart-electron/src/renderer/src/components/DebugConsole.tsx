@@ -24,7 +24,7 @@ export default function DebugConsole({ logs, wavesRef }: Props) {
   return (
     <div className="console-grid">
       <div className="console-log" ref={scrollRef}>
-        {logs.length === 0 && <div className="log-line log-info">— debug console —</div>}
+        {logs.length === 0 && <div className="log-line log-info">- debug console -</div>}
         {logs.map((l, i) => (
           <div key={i} className={`log-line log-${l.level}`}>
             <span className="log-time">{l.time}</span> {l.message}

@@ -5,3 +5,4 @@ brainflow>=5.12
 numpy
 pandas
 websockets>=12
+Pillow          # print path only: composes the Canon Ivy 640x1616 payload

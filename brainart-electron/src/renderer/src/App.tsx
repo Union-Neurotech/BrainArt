@@ -92,7 +92,7 @@ export default function App() {
   // indistinguishable from one that worked, since the UI only updates on the
   // `status` message the backend sends back.
   const cmd = (msg: Record<string, unknown>) => {
-    if (!send(msg)) addLog('error', 'Backend offline — command not sent.')
+    if (!send(msg)) addLog('error', 'Backend offline - command not sent.')
   }
 
   const onConnect = () =>
@@ -110,7 +110,7 @@ export default function App() {
       addLog('error', 'Could not capture the canvas.')
       return
     }
-    if (!send({ type, png })) addLog('error', 'Backend offline — image not sent.')
+    if (!send({ type, png })) addLog('error', 'Backend offline - image not sent.')
   }
 
   const onSave = () => sendImage('save_image')

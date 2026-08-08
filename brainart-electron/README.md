@@ -4,7 +4,7 @@ Desktop BrainArt: an Electron front-end (WebGL CPPN viewport + status/control ba
 + debug console) driven by a Python backend that handles BrainFlow devices and
 talks to the renderer over a local WebSocket.
 
-**You do not need an EEG headset to run the demo** — the Synthetic board produces
+**You do not need an EEG headset to run the demo** - the Synthetic board produces
 fake but realistic data and drives the artwork exactly like a real device.
 
 ## Quick start
@@ -32,12 +32,12 @@ reacting within a few seconds. **Stop** when done.
 | OS | Windows / macOS / Linux | Printing uses `os.startfile` on Windows, `lpr` elsewhere |
 
 Python deps come from **`requirements-backend.txt`** (brainflow, numpy, pandas,
-websockets), *not* the root `requirements.txt` — that one pins Streamlit-era
+websockets), *not* the root `requirements.txt` - that one pins Streamlit-era
 versions for the legacy UI and won't install cleanly on modern Python.
 
 ## One-time setup
 
-**Python backend env** — from the **project root**, one level up from here:
+**Python backend env** - from the **project root**, one level up from here:
 
 ```sh
 python -m venv .esp
@@ -58,13 +58,13 @@ npm install
 ## Running
 
 ```sh
-npm run dev     # dev mode, hot reload — use this
+npm run dev     # dev mode, hot reload - use this
 npm run build   # produce out/ for a packaged/preview run
 npm run preview # run the built output
 ```
 
 `npm run dev` launches Electron, which spawns the Python backend itself and opens
-the window. Backend output is prefixed `[py]` in the same terminal — that's where
+the window. Backend output is prefixed `[py]` in the same terminal - that's where
 save confirmations and device errors appear.
 
 > **Use `npm run dev` while developing.** `preview`, a bare `electron .`, or a
@@ -96,7 +96,7 @@ To run the backend by itself (useful for debugging it in isolation):
 1. Power on the headset and make sure it isn't already paired to another app.
 2. Pick **Muse2** in the dropdown → **Connect** → **Start**.
 
-BrainFlow talks to the Muse 2 over **native BLE — no BLED112 dongle required**.
+BrainFlow talks to the Muse 2 over **native BLE - no BLED112 dongle required**.
 That's why no serial-port field appears for it: the port input is only rendered
 for boards flagged `using_port` in [`src/assets.py`](../src/assets.py), which
 among the enabled boards means only the OpenBCI Cyton.
@@ -125,14 +125,14 @@ The backend sends seven values; the renderer maps them to shader uniforms in
 | Metric | BrainFlow source | Effect |
 |---|---|---|
 | **Concentration** | `BrainFlowMetrics.MINDFULNESS` | Feeds the *focus* effect (see below), if selected. |
-| **Relaxation** | `BrainFlowMetrics.RESTFULNESS` | Adds to `u_zoom` — pulls back and softens. Also feeds *focus* if selected. |
+| **Relaxation** | `BrainFlowMetrics.RESTFULNESS` | Adds to `u_zoom` - pulls back and softens. Also feeds *focus* if selected. |
 
 **The focus effect** adds to `u_complexity` (sharper structure) and damps both
-`u_chaos` and `u_speed` — it sharpens and calms the image at the same time. The
+`u_chaos` and `u_speed` - it sharpens and calms the image at the same time. The
 **Focus driver** dropdown in the ML Metrics section picks which metric drives it.
 
 > **These two metrics are one signal.** BrainFlow computes `RESTFULNESS` as the
-> exact complement of `MINDFULNESS` — verified bit-exact (`mindful + restful == 1.0`)
+> exact complement of `MINDFULNESS` - verified bit-exact (`mindful + restful == 1.0`)
 > across 300 random band-power vectors, with zero floating-point error. So
 > `relaxation === 1 - concentration`, always. The dropdown therefore doesn't add a
 > second input; it flips which end of that single axis reads as "focused".
@@ -140,12 +140,12 @@ The backend sends seven values; the renderer maps them to shader uniforms in
 > relax rather than as you focus.
 
 > **Naming:** BrainFlow ships only `MINDFULNESS`, `RESTFULNESS` and `USER_DEFINED`
-> — there is no `CONCENTRATION` or `RELAXATION` metric. This app surfaces
+> - there is no `CONCENTRATION` or `RELAXATION` metric. This app surfaces
 > `MINDFULNESS` as "Concentration" and `RESTFULNESS` as "Relaxation".
 > A "Meditative state" indicator used to show `MINDFULNESS` separately; it was
 > removed once Concentration was bound to the same metric.
 
-**Valence, Arousal and Depth are never sent by the backend** — they are manual
+**Valence, Arousal and Depth are never sent by the backend** - they are manual
 sliders only.
 
 ### Two things to know before tuning
@@ -159,7 +159,7 @@ sliders only.
 2. **The two ML metrics are true 0..1**, so they dominate the live look.
 
 > On the **Synthetic** board these metrics commonly pin at `concentration = 1.00`
-> and `relaxation = 0.00` — its output is generated waveforms, not physiological
+> and `relaxation = 0.00` - its output is generated waveforms, not physiological
 > EEG, so BrainFlow's classifiers saturate. Synthetic is good for exercising the
 > band powers and the plumbing; judge the ML metrics on a real headset.
 
@@ -167,9 +167,9 @@ sliders only.
 
 | To change | Edit |
 |---|---|
-| How strongly a metric affects the image | The coefficients in `emotionToVisuals()`, [renderer.js:75-100](brainart-electron/src/renderer/src/gl/renderer.js#L75-L100) — start here |
+| How strongly a metric affects the image | The coefficients in `emotionToVisuals()`, [renderer.js:75-100](brainart-electron/src/renderer/src/gl/renderer.js#L75-L100) - start here |
 | What a uniform actually does to the pixels | [gl/cppn.js](brainart-electron/src/renderer/src/gl/cppn.js) (the fragment shader) |
-| Which metrics get computed and sent | `get_simple_feature_vector` ([preprocessing.py:171](src/preprocessing.py#L171)) **and** `METRIC_KEYS` ([server.py:100](src/server.py#L100)) — these are zipped together, so they must stay in the same order |
+| Which metrics get computed and sent | `get_simple_feature_vector` ([preprocessing.py:171](src/preprocessing.py#L171)) **and** `METRIC_KEYS` ([server.py:100](src/server.py#L100)) - these are zipped together, so they must stay in the same order |
 | Which metrics are displayed | The `Indicator` rows in [StatusBar.tsx:167-184](brainart-electron/src/renderer/src/components/StatusBar.tsx#L167-L184) |
 | Which BrainFlow model backs a metric | `get_concentration_value` / `get_relaxation_value` ([preprocessing.py:269-325](src/preprocessing.py#L269-L325)) |
 | Update rate and smoothing | `METRICS_HZ`, `METRICS_WINDOW_SEC`, `METRICS_EMA_ALPHA` ([server.py:92-98](src/server.py#L92-L98)) |
@@ -184,14 +184,14 @@ rather than an error.
 ### Driving the visuals by hand
 
 The **Emotion** sliders write to the same visual state the backend patches, so
-they work with nothing connected — handy for exploring the art or reproducing
+they work with nothing connected - handy for exploring the art or reproducing
 rendering issues:
 
-- **Arousal** — zoom and structural complexity
-- **Valence** — warm ↔ cool, and saturation
-- **Depth** — CPPN layer count (1–12); the strongest lever on visual detail
+- **Arousal** - zoom and structural complexity
+- **Valence** - warm ↔ cool, and saturation
+- **Depth** - CPPN layer count (1–12); the strongest lever on visual detail
 
-The **EEG Bands** and **ML Metrics** rows above them are read-only indicators —
+The **EEG Bands** and **ML Metrics** rows above them are read-only indicators -
 they display backend values and can't be dragged.
 
 ### Saving
@@ -202,14 +202,23 @@ file and logs the full path. Filenames are timestamped and suffixed (`_1`, `_2`,
 …) so rapid saves don't overwrite each other.
 
 **Images are saved to your Downloads folder by default.** Electron resolves it
-with `app.getPath('downloads')`, which asks the OS for the real location —
+with `app.getPath('downloads')`, which asks the OS for the real location -
 correct even if you've moved Downloads to another drive.
+
+**Every session is recorded.** Pressing **Stop** writes all EEG buffered since
+**Start** to `brainart_eeg_<start-time>.csv` alongside the images - one row per
+sample, one column per board channel, named where BrainFlow names them (`Fz`,
+`TP9`, …, plus `timestamp` and `package_num`; unnamed rows keep their index as
+`ch_N`). The file is written *before* metrics are computed, so a metrics failure
+never costs you the recording. The board buffers 450 000 samples per channel
+(`RING_BUFFER` in [server.py](../src/server.py)) - ~29 min at 256 Hz; past that
+the earliest samples are dropped by the board and the console says so.
 
 ### Saving somewhere else
 
 | Goal | How |
 |---|---|
-| Downloads | nothing to do — this is the default |
+| Downloads | nothing to do - this is the default |
 | Back to `../generated/images` | `BRAINART_SAVE_TO_PROJECT=1` |
 | A specific folder | `BRAINART_IMAGE_DIR=D:\brainart-output` |
 
@@ -243,7 +252,7 @@ always confirm where saves will land before clicking anything.
 Image-destination precedence: CLI flag (`--downloads` / `--project-images` /
 `--image-dir`) → `$BRAINART_IMAGE_DIR` → **Downloads** (default).
 
-> These env vars are presence-checked, not value-parsed — `BRAINART_SAVE_TO_PROJECT=0`
+> These env vars are presence-checked, not value-parsed - `BRAINART_SAVE_TO_PROJECT=0`
 > still counts as *set*. Unset the variable to turn it off.
 
 ## Architecture
@@ -268,14 +277,14 @@ debug console + raw wave preview (bottom-left), status/control rail (right).
   `save_image`, `print_image`
 - backend → renderer: `boards`, `log`, `status`, `waves`, `state`
 
-A `state` patch sets the viewport's visual parameters — during streaming these
+A `state` patch sets the viewport's visual parameters - during streaming these
 arrive ~10 Hz (EMA-smoothed), plus one final averaged patch on **Stop**.
 
 ## Troubleshooting
 
 **Nothing happens when I click Save Image.**
 The backend refuses oversized WebSocket frames. `server.py` passes
-`max_size=None` for exactly this reason — screenshots run to several MB and the
+`max_size=None` for exactly this reason - screenshots run to several MB and the
 library's 1 MiB default silently killed the connection (close 1009) without
 delivering the message. If you see `Renderer socket closed (sent): 1009` in the
 `[py]` output, that cap is back.
@@ -286,11 +295,11 @@ before `preview`.
 
 **`electron.app` is undefined / Electron runs as plain Node.**
 A host terminal leaked `ELECTRON_RUN_AS_NODE=1`. `npm run dev` strips it (see
-`scripts/dev.mjs`) — launch through that script rather than `npx electron-vite dev`.
+`scripts/dev.mjs`) - launch through that script rather than `npx electron-vite dev`.
 
 **Backend never comes up; the rail reads `connecting to backend…`.**
 Check the `[py]` lines in the terminal. Usually the `.esp` venv is missing or
-lacks the backend deps — re-run the pip install above, or set `BRAINART_PYTHON`.
+lacks the backend deps - re-run the pip install above, or set `BRAINART_PYTHON`.
 If port 17321 is taken, set `BRAINART_WS_PORT`.
 
 **Muse 2 won't connect.**
@@ -302,6 +311,6 @@ permissions.
 The WebGL loop ends each frame with a 1px `gl.readPixels` (see
 `src/renderer/src/gl/renderer.js`). This forces the GPU to resolve the frame
 before Chromium's compositor presents it, eliminating a present-race.
-`gl.finish()` alone was not enough on this driver — keep the `readPixels` line.
+`gl.finish()` alone was not enough on this driver - keep the `readPixels` line.
 Relatedly, `preserveDrawingBuffer` is intentionally **off**, which is why
 `screenshot()` draws a fresh frame immediately before `toDataURL()`.

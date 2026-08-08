@@ -29,6 +29,7 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if THIS_DIR not in sys.path:
     sys.path.insert(0, THIS_DIR)
 
+import pandas as pd
 import websockets
 
 from brainflow.board_shim import BoardShim
@@ -39,6 +40,14 @@ from preprocessing import get_simple_feature_vector
 
 PROJECT_ROOT = os.path.dirname(THIS_DIR)
 PROJECT_IMAGE_DIR = os.path.join(PROJECT_ROOT, "generated", "images")
+
+# Canon Ivy 1 print geometry. The printer takes a 640x1616 buffer, but only the
+# centered ~640x925 band reaches the paper -- the top and bottom ~345px each are
+# consumed by the ZINK activation pass. 640:925 is the real 2x3in photo.
+# ponytail: calibration knobs, not constants. Print the test pattern from
+# ivy-print-program/test/format_image.py and adjust if the band lands off-centre.
+IVY_W, IVY_H = 640, 1616
+IVY_VIS_W, IVY_VIS_H = 640, 925
 
 
 def downloads_dir():
@@ -107,11 +116,54 @@ METRIC_KEYS = [
     "relaxation",      # BrainFlow RESTFULNESS metric
 ]
 
+# Samples per channel the board buffers between START and STOP. Both live loops
+# only *peek* (get_current_board_data), so nothing is consumed until STOP drains
+# it -- but past this the board silently drops the OLDEST samples.
+# ponytail: ~29 min at 256 Hz, plenty for a session. Raise it for longer runs, or
+# switch to BrainFlow's own streamer (start_stream(n, "file://raw.csv:w")) to
+# write straight to disk with no ceiling at all.
+RING_BUFFER = 450_000
+
 
 def _board_id(info):
     """board_id_pairs stores either an IntEnum or a raw int."""
     bid = info["id"]
     return bid.value if hasattr(bid, "value") else int(bid)
+
+
+def ivy_payload(path):
+    """PNG on disk -> 640x1616 JPEG bytes the Canon Ivy 1 accepts.
+
+    The canvas is 16:9 landscape and the paper is 2:3 portrait, so the art is
+    turned 90 degrees and scale-to-filled into the visible band: the whole photo
+    gets used, at the cost of ~19% off the art's long edge.
+    """
+    from PIL import Image      # local import: a missing Pillow must not kill the
+    from io import BytesIO     # whole backend, only printing
+
+    img = Image.open(path)
+    if img.mode == "RGBA":
+        # Composite rather than convert("RGB"), which keeps whatever raw RGB sits
+        # under the alpha (usually black) instead of the intended backdrop.
+        bg = Image.new("RGB", img.size, "white")
+        bg.paste(img, mask=img.split()[3])
+        img = bg
+    else:
+        img = img.convert("RGB")
+
+    img = img.rotate(90, expand=True)     # 16:9 landscape -> 9:16 portrait
+    scale = max(IVY_VIS_W / img.width, IVY_VIS_H / img.height)
+    img = img.resize((round(img.width * scale), round(img.height * scale)),
+                     Image.Resampling.LANCZOS)
+    left, top = (img.width - IVY_VIS_W) // 2, (img.height - IVY_VIS_H) // 2
+    art = img.crop((left, top, left + IVY_VIS_W, top + IVY_VIS_H))
+
+    buf_img = Image.new("RGB", (IVY_W, IVY_H), "white")
+    buf_img.paste(art, ((IVY_W - IVY_VIS_W) // 2, (IVY_H - IVY_VIS_H) // 2))
+    buf_img = buf_img.rotate(180)         # printer feeds the paper bottom-first
+    out = BytesIO()
+    buf_img.save(out, format="JPEG", quality=100)
+    return out.getvalue()
 
 
 class Backend:
@@ -129,6 +181,7 @@ class Backend:
         self.eeg_channels = []
         self._metrics_ema = None        # smoothed live-metric state
         self._metrics_err_logged = False  # rate-limit live-metric error logs
+        self._session_stamp = None      # START time, names the session's CSV
 
     # ---- outbound messaging -------------------------------------------------
     async def broadcast(self, msg):
@@ -241,10 +294,12 @@ class Backend:
             await self.log("Already streaming.", "error")
             return
         try:
-            await asyncio.to_thread(self.comms.start_stream)
+            await asyncio.to_thread(self.comms.start_stream, RING_BUFFER)
             # Reset the ring buffer so the start->stop averaging window is clean.
             await asyncio.to_thread(self.comms.board.get_board_data)
             self.streaming = True
+            # Name the recording after when it started, not when it was written.
+            self._session_stamp = time.strftime("%Y%m%d_%H%M%S")
             await self.log("Streaming started.")
             await self.send_status()
             # Fresh smoothing state for each streaming session.
@@ -353,7 +408,23 @@ class Backend:
             await asyncio.to_thread(self.comms.stop_stream)
             await self.send_status()
             n = data.shape[1] if data is not None else 0
-            await self.log(f"Streaming stopped. Collected {n} samples. Computing metrics ...")
+            await self.log(f"Streaming stopped. Collected {n} samples.")
+            if n >= RING_BUFFER:
+                await self.log(
+                    f"Session hit the {RING_BUFFER}-sample buffer -- the earliest "
+                    f"samples were dropped by the board and are not in the file.",
+                    "error",
+                )
+            # Its own try/except, and ahead of the metrics: a recording is the one
+            # thing here that cannot be regenerated, so a metrics failure must not
+            # take it down with it.
+            if n:
+                try:
+                    csv_path = await asyncio.to_thread(self._write_csv, data)
+                    await self.log(f"EEG session saved: {csv_path}")
+                except Exception as e:
+                    await self.log(f"EEG save failed: {e}", "error")
+            await self.log("Computing metrics ...")
             patch = await asyncio.to_thread(self.compute_metrics, data)
             await self.broadcast({"type": "state", "patch": patch})
             await self.log("Metrics: " + ", ".join(f"{k}={v:.2f}" for k, v in patch.items()))
@@ -368,23 +439,67 @@ class Backend:
         fv = get_simple_feature_vector(data=data, boardID=self.board_id)
         return {k: float(v) for k, v in zip(METRIC_KEYS, fv)}
 
-    # ---- image save / print -------------------------------------------------
+    # ---- file output --------------------------------------------------------
+    def _unique_path(self, stem, ext):
+        """<image_dir>/<stem>.<ext>, suffixed until the name is free.
+
+        Timestamps are second-resolution, so two writes in the same second would
+        otherwise overwrite each other.
+        """
+        os.makedirs(self.image_dir, exist_ok=True)
+        base = os.path.join(self.image_dir, stem)
+        path = f"{base}.{ext}"
+        n = 1
+        while os.path.exists(path):
+            path = f"{base}_{n}.{ext}"
+            n += 1
+        return path
+
     def _write_png(self, b64):
         if not b64:
             return None
         if "," in b64:                       # strip a data: URL header if present
             b64 = b64.split(",", 1)[1]
-        os.makedirs(self.image_dir, exist_ok=True)
-        # Timestamps are second-resolution, so two saves in the same second would
-        # otherwise overwrite each other. Suffix until the name is free.
-        stem = os.path.join(self.image_dir, f"brainart_{time.strftime('%Y%m%d_%H%M%S')}")
-        path = f"{stem}.png"
-        n = 1
-        while os.path.exists(path):
-            path = f"{stem}_{n}.png"
-            n += 1
+        path = self._unique_path(f"brainart_{time.strftime('%Y%m%d_%H%M%S')}", "png")
         with open(path, "wb") as f:
             f.write(base64.b64decode(b64))
+        return path
+
+    def _column_names(self, n_rows):
+        """Row index -> column name for the board's data matrix.
+
+        Every getter is guarded separately: which channel groups a board exposes
+        varies, and BrainFlow raises for the ones it doesn't have. Unnamed rows
+        keep their index so nothing is silently dropped or mislabelled.
+        """
+        names = {}
+        try:
+            for i, nm in zip(BoardShim.get_eeg_channels(self.board_id),
+                             BoardShim.get_eeg_names(self.board_id)):
+                names[i] = nm
+        except Exception:
+            pass
+        for getter, nm in (
+            (BoardShim.get_timestamp_channel, "timestamp"),
+            (BoardShim.get_marker_channel, "marker"),
+            (BoardShim.get_package_num_channel, "package_num"),
+        ):
+            try:
+                names[getter(self.board_id)] = nm
+            except Exception:
+                pass
+        return [names.get(i, f"ch_{i}") for i in range(n_rows)]
+
+    def _write_csv(self, data):
+        """Whole session's board matrix -> CSV. Runs in a thread.
+
+        Writes every row the board produces, not just EEG -- accel/gyro/other
+        columns are cheap here and impossible to recover later.
+        """
+        stamp = self._session_stamp or time.strftime("%Y%m%d_%H%M%S")
+        path = self._unique_path(f"brainart_eeg_{stamp}", "csv")
+        df = pd.DataFrame(data.T, columns=self._column_names(data.shape[0]))
+        df.to_csv(path, index=False)
         return path
 
     async def save_image(self, b64):
@@ -397,11 +512,37 @@ class Backend:
         except Exception as e:
             await self.log(f"Save failed: {e}", "error")
 
-    def _os_print(self, path):
-        if sys.platform.startswith("win"):
-            os.startfile(path, "print")      # default printer
-        else:                                # macOS / Linux
-            os.system(f'lpr "{path}"')
+    def _ivy_print(self, path):
+        """Blocking: compose, connect over Bluetooth RFCOMM, OBEX-push. In a thread.
+
+        Only the transport is borrowed from ivy-print-program; its prepare_image()
+        scale-to-fills against the full 1616 buffer rather than the visible band,
+        which would crop ~77% of the width off a 1600x900 screenshot.
+        """
+        ivy_dir = os.path.join(PROJECT_ROOT, "ivy-print-program")
+        if ivy_dir not in sys.path:
+            sys.path.insert(0, ivy_dir)
+        from ivy1_print import (find_opp_port, send_image_obex,
+                                obex_disconnect_packet, PRINTER_MAC)
+
+        jpeg = ivy_payload(path)
+        sock, _ = find_opp_port(os.environ.get("IVY_MAC", PRINTER_MAC))
+        if sock is None:
+            raise RuntimeError("Ivy not found -- is it powered on, paired in Windows "
+                               "Bluetooth settings, and not connected to a phone?")
+        try:
+            # find_opp_port leaves a 3s timeout on the socket, and nothing raises it
+            # for the transfer. Any chunk ACK slower than that would throw
+            # socket.timeout mid-print; the printer is not reliably that fast.
+            sock.settimeout(15)
+            if not send_image_obex(sock, jpeg):
+                raise RuntimeError("Printer rejected the image (OBEX PUT failed).")
+        finally:
+            try:
+                sock.send(obex_disconnect_packet())
+                sock.close()
+            except Exception:
+                pass
 
     async def print_image(self, b64):
         try:
@@ -413,9 +554,12 @@ class Backend:
             await self.log("No image data to print.", "error")
             return
         await self.log(f"Image saved for printing: {path}")
+        # The channel sweep in find_opp_port costs up to ~70s against a printer
+        # that is off, so say so before blocking -- silence here reads as a hang.
+        await self.log("Sending to Canon Ivy over Bluetooth (up to a minute)...")
         try:
-            await asyncio.to_thread(self._os_print, path)
-            await self.log("Sent image to printer.")
+            await asyncio.to_thread(self._ivy_print, path)
+            await self.log("Sent to Ivy -- printing takes ~45 s.")
         except Exception as e:
             await self.log(f"Print failed: {e}", "error")
 
